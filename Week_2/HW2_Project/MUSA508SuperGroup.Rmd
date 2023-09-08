@@ -17,19 +17,12 @@ knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message = FALSE)
 ```
 
-### Cleaning Workspace
+### Cleaning Workspace & Setup
 
-Depending on your use of R and Philadelphia ACS data, variables and data frames in your current environment might conflict with those declared in this markdown file. You can clear the current environment programmatically using the rm() function below.
-
-```{r clear_environment, cache=TRUE,eval=FALSE}
+```{r clear_environment, cache=TRUE,include=F}
 
 rm(list=ls())
 ```
-### Install Libraries
-
-If you haven't installed either `tidyverse`, `tidycensus`, or `sf` use the `install.packages` command like so:
-
-(If you have them installed, you can skip this step)
 
 ```{r setup_packages1, warning = FALSE, eval = FALSE,include=F}
 install.packages('tidyverse')
@@ -38,8 +31,8 @@ install.packages('sf')
 install.packages('kableExtra')
 ```
 
-Then, load the libraries and set some options for a specific color ramp or preventing scientific notation.
-```{r code_setup, include=FALSE}
+This analysis used R's `tidyverse`, `tidycensus`, `kableExtra`, and `sf` packages. In our setup, we load the libraries and set some options for a specific color ramp or preventing scientific notation.
+```{r code_setup}
 library(tidyverse)
 library(tidycensus)
 library(kableExtra)
@@ -54,9 +47,7 @@ palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
 
 # set source url to grab functions from MUSA 5080 book
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
-```
 
-```{r load_key, warning = FALSE, eval = FALSE,message=FALSE}
 # Timothy's api key: "89824ea2e775e055d3b39974bbc07de16215f217"
 census_api_key(Sys.getenv("CENSUS_API_KEY"), overwrite = TRUE)
 ```
@@ -78,8 +69,6 @@ tracts16 <-
 
 #### Wide data vs long data (and `spread`vs `gather`)
 
-![wide vs long
-data](https://www.garrickadenbuie.com/project/tidyexplain/images/tidyr-spread-gather.gif)
 
 We create a new data frame consisting only of population
 
@@ -92,7 +81,7 @@ totalPop16 <-
 
 Ways to examine the data
 
-```{r}
+```{r,include=F,eval=F}
 nrow(totalPop16)
 
 names(totalPop16)
