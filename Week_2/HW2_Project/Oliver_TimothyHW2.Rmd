@@ -1,0 +1,70 @@
+---
+title: "HW Assignment 2"
+author: "Timothy Oliver"
+date: "15 September 2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+# Setup
+
+```{r setup, include=FALSE, cache = TRUE,message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidycensus)
+library(knitr)
+library(kableExtra)
+library(sf)
+
+options(scipen=999)
+
+```
+
+### Cleaning Workspace
+
+Depending on your use of R and Philadelphia ACS data, variables and data frames in your current environment might conflict with those declared in this markdown file. You can clear the current environment programmatically using the rm() function below.
+
+```{r clear_environment, cache=TRUE,eval=FALSE}
+
+rm(list=ls())
+```
+### Install Libraries
+
+If you haven't installed either `tidyverse`, `tidycensus`, or `sf` use the `install.packages` command like so:
+
+(If you have them installed, you can skip this step)
+
+```{r setup_packages1, warning = FALSE, eval = FALSE,}
+install.packages('tidyverse')
+install.packages('tidycensus')
+install.packages('sf')
+install.packages('kableExtra')
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

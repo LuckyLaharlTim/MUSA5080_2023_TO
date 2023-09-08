@@ -1,0 +1,13 @@
+# Testing Chunk Options
+## include = FALSE
+### want visual output
+```{r testing_eval, include = FALSE, message=FALSE, warning=FALSE, cache=FALSE}
+x <- "here I am"
+x
+```
+
+### want non-visual
+```{r testing_eval2, message=FALSE, warning=FALSE, cache=TRUE,include = FALSE}
+paste(x,"#2")
+library(magrittr)
+```
