@@ -518,7 +518,7 @@ contained in "map_exercise.R"
 ### TOD Indicator Tables
 
 ```{r}
-allTracts.Summary <- 
+allTracts.Summary2 <- 
   st_drop_geometry(allTracts.group) %>%
   group_by(year, TOD) %>%
   summarize(Rent = mean(MedRent, na.rm = T),

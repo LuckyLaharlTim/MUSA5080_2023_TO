@@ -1,6 +1,6 @@
 ---
 title: "HW Assignment 2"
-author: "Timothy Oliver"
+author: "MUSA 508 Super Group"
 date: "15 September 2023"
 output:
   html_document:
