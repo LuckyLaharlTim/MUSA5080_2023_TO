@@ -55,7 +55,8 @@ census_api_key(Sys.getenv("CENSUS_API_KEY"), overwrite = TRUE)
 ### Use `get_acs()` to get 2016 ACS data
 
 Notice this returns "long" data - let's examine it
-
+`r x<- load_variables(2017,"acs5")`
+`
 ```{r results='hide'}
 tracts16 <-  
   get_acs(geography = "tract",
@@ -67,6 +68,25 @@ tracts16 <-
   st_transform('ESRI:102685')
 ```
 
+```{r Timothy_Vars results='hide'}
+tracts2020 <-  
+  get_acs(geography = "tract",
+          
+          #             Var ID          Intended Name for Column
+          variables = c("B25026_001E", # given var 1
+                        "B02001_002E", # given var 2
+                        "B15001_050E", # given var 3
+                        "B15001_009E", # given var 4
+                        "B19013_001E", # given var 5
+                        "B25058_001E", # given var 6
+                        "B06012_002E"), # given var 7
+          
+          year=2020, state="DC", geometry=TRUE) %>% 
+  st_transform('ESRI:102685') # Maryland's State Plane CS
+```
+
+```{r Name_Vars results='hide'}
+```
 #### Wide data vs long data (and `spread`vs `gather`)
 
 
@@ -200,7 +220,7 @@ tracts20 <-
          MedRent = B25058_001E,
          TotalPoverty = B06012_002E) %>%
   dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0), 
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
          year = "2020") %>%
