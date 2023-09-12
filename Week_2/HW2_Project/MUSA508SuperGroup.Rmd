@@ -56,7 +56,7 @@ census_api_key(Sys.getenv("CENSUS_API_KEY"), overwrite = TRUE)
 
 Notice this returns "long" data - let's examine it
 `r x<- load_variables(2017,"acs5")`
-`
+
 ```{r results='hide'}
 tracts16 <-  
   get_acs(geography = "tract",
@@ -67,8 +67,10 @@ tracts16 <-
           year=2016, state="DC", geometry=TRUE) %>% 
   st_transform('ESRI:102685')
 ```
-
+# Variable Retrieval & Descriptions
 ```{r Timothy_Vars results='hide'}
+
+## Need to get right variables still --different year has different variable name
 tracts2020 <-  
   get_acs(geography = "tract",
           
@@ -79,10 +81,26 @@ tracts2020 <-
                         "B15001_009E", # given var 4
                         "B19013_001E", # given var 5
                         "B25058_001E", # given var 6
-                        "B06012_002E"), # given var 7
+                        "B06012_002E" # given var 7
+                         # Estimated Total Population by Detailed Race
+                        ), 
           
           year=2020, state="DC", geometry=TRUE) %>% 
-  st_transform('ESRI:102685') # Maryland's State Plane CS
+  st_transform('ESRI:102685') %>% # Maryland's State Plane CS
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E
+         ) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2020") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
 ```
 
 ```{r Name_Vars results='hide'}
@@ -246,7 +264,7 @@ tracts09 <-
                         "B06012_002E"), 
           year=2009, state=DC, 
           geometry=TRUE, output="wide") %>%
-  st_transform('ESRI:102728') %>%
+  st_transform('ESRI:102685') %>%
   rename(TotalPop = B25026_001E, 
          Whites = B02001_002E,
          FemaleBachelors = B15001_050E, 
@@ -271,7 +289,7 @@ tracts17 <-
                         "B06012_002E"), 
           year=2017, state=DC, 
           geometry=TRUE, output="wide") %>%
-  st_transform('ESRI:102728') %>%
+  st_transform('ESRI:102685') %>%
   rename(TotalPop = B25026_001E, 
          Whites = B02001_002E,
          FemaleBachelors = B15001_050E, 
@@ -289,14 +307,30 @@ tracts17 <-
 
 ## UnConverted Code: 'Wrangling Transit Open Data' Forward
 
-## Tried writing something to pull DC metro stations based on code for SEPTA stops
-```{r pull_metro_data}
+## Tried writing something to pull DC metro stations based on code for SEPTA stops - Jamie
+### Added in Metro lines - Timothy
+```{r pull_metro_data, results='hide'}
 #no idea if this works yet... need to test
 metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, LINE) %>%
   st_transform(st_crs(tracts20)) # change tracts20 to tracts## based on years used
+
+metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, GIS_ID) %>%
+  st_transform(st_crs(tracts20)) 
+
 ```
 
+## View of Metro Stations alone
+```{r view_metro_data}
+ggplot() +
+  geom_sf(data=tracts16)+
+  geom_sf(data=metroStops, show.legend = "point", size=2,color = "#800000")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+  geom_sf(data=metroLines, aes(color=NAME))+ # Why is color wrong, but it gets the right names?
+  labs(color="DC Metro Lines")+
+  mapTheme()
+  
+```
 ## ACS variable exploration
 
 ### Jamie's notes
@@ -311,7 +345,7 @@ tracts09 <-
                         "B06012_002E",
                         "B05012_003E", "B25002_003E", #new ones begin here
                         "B25002_001E", "B25071_001E"),
-          year=2009, state=DC, 
+          year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102728') %>%
   rename(TotalPop = B25026_001E, 
