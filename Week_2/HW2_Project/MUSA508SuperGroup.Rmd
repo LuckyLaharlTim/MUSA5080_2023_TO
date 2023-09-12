@@ -233,4 +233,118 @@ tracts20 <-
 allTracts <- rbind(tracts16,tracts20)
 ```
 
-# UnConverted Code: 'Wrangling Transit Open Data' Forward
+# Code and notes for HW2
+
+## Pulling census tracts and ACS data for 2009 and 2017 (?)
+
+```{r data 2009 results='hide'}
+tracts09 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2009, state=DC, 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102728') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2009") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+```
+
+```{r data 2017 results='hide'}
+tracts17 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2017, state=DC, 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102728') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2017") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+```
+
+## UnConverted Code: 'Wrangling Transit Open Data' Forward
+
+## Tried writing something to pull DC metro stations based on code for SEPTA stops
+```{r pull_metro_data}
+#no idea if this works yet... need to test
+metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, LINE) %>%
+  st_transform(st_crs(tracts20)) # change tracts20 to tracts## based on years used
+```
+
+## ACS variable exploration
+
+### Jamie's notes
+
+Dropping a sample code chunk here that fetches/mutates my variables of interest.
+
+```{r jamie_acs_vars results='hide'}
+tracts09 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E",
+                        "B05012_003E", "B25002_003E", #new ones begin here
+                        "B25002_001E", "B25071_001E"),
+          year=2009, state=DC, 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102728') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         RentBurden = B25071_001E
+         ) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         year = "2009") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs) 
+```
+
+To summarize the new variables:
+- RentBurden: median gross rent as a percentage of household income
+- pctForeignBorn: percent of population born outside the US
+- pctVacant: percent of households that are vacant
+
+The story I want to tell is one of equity in transit-oriented development. Of course, building residential and commercial developments with Metro access optimizes the value of public transit and improves overall mobility, sustainability and economic resilience. Indeed, transit may However, we should consider serving the people being left behind by private free market development and suggest ways to build affordable housing near key assets like commercial corridors and Metro stations.
+
+We can investigate this problem from multiple angles.
+
+1. Rent burden: As rent rises and income remains constant, the percentage of income spent on rent must rise as well. This percentage represents a key factor in whether residents must relocate because of rent unaffordability. It is most critical for lower income residents because they have less disposable income and limited options for relocation.
+
+2. Foreign born population: Those who were not born in the US disproportionately grapple with limited English proficiency, unemployment and poor access to needed cultural resources. Transit access provides immigrants with opportunities to travel to language and job training, as well as to communities with shared culture and language.
+
+3. Vacancy: tktktk
