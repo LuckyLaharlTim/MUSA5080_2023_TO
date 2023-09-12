@@ -67,44 +67,6 @@ tracts16 <-
           year=2016, state="DC", geometry=TRUE) %>% 
   st_transform('ESRI:102685')
 ```
-# Variable Retrieval & Descriptions
-```{r Timothy_Vars results='hide'}
-
-## Need to get right variables still --different year has different variable name
-tracts2020 <-  
-  get_acs(geography = "tract",
-          
-          #             Var ID          Intended Name for Column
-          variables = c("B25026_001E", # given var 1
-                        "B02001_002E", # given var 2
-                        "B15001_050E", # given var 3
-                        "B15001_009E", # given var 4
-                        "B19013_001E", # given var 5
-                        "B25058_001E", # given var 6
-                        "B06012_002E" # given var 7
-                         # Estimated Total Population by Detailed Race
-                        ), 
-          
-          year=2020, state="DC", geometry=TRUE) %>% 
-  st_transform('ESRI:102685') %>% # Maryland's State Plane CS
-  rename(TotalPop = B25026_001E, 
-         Whites = B02001_002E,
-         FemaleBachelors = B15001_050E, 
-         MaleBachelors = B15001_009E,
-         MedHHInc = B19013_001E, 
-         MedRent = B25058_001E,
-         TotalPoverty = B06012_002E
-         ) %>%
-  dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-         year = "2020") %>%
-  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
-```
-
-```{r Name_Vars results='hide'}
-```
 #### Wide data vs long data (and `spread`vs `gather`)
 
 
@@ -255,14 +217,14 @@ allTracts <- rbind(tracts16,tracts20)
 
 ## Pulling census tracts and ACS data for 2009 and 2017 (?)
 
-```{r data 2009 results='hide'}
+```{r data_2009, results='hide'}
 tracts09 <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2009, state=DC, 
+          year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102685') %>%
   rename(TotalPop = B25026_001E, 
@@ -280,14 +242,14 @@ tracts09 <-
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 ```
 
-```{r data 2017 results='hide'}
+```{r data_2017, results='hide'}
 tracts17 <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B15001_050E","B15001_009E",
                         "B19013_001E","B25058_001E",
                         "B06012_002E"), 
-          year=2017, state=DC, 
+          year=2017, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102685') %>%
   rename(TotalPop = B25026_001E, 
@@ -321,7 +283,7 @@ metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA
 
 ```
 
-## View of Metro Stations alone
+## View of Metro Stations & Lines
 ```{r view_metro_data}
 ggplot() +
   geom_sf(data=tracts16)+
@@ -331,13 +293,18 @@ ggplot() +
   mapTheme()
   
 ```
-## ACS variable exploration
+## Starting Multiple Ring Buffer
+
+```{r multipleRingBuffer_test}
+```
+
+# ACS variable exploration
 
 ### Jamie's notes
 
 Dropping a sample code chunk here that fetches/mutates my variables of interest.
 
-```{r jamie_acs_vars results='hide'}
+```{r jamie_acs_vars, results='hide'}
 tracts09 <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
@@ -347,7 +314,7 @@ tracts09 <-
                         "B25002_001E", "B25071_001E"),
           year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
-  st_transform('ESRI:102728') %>%
+  st_transform('ESRI:102685') %>%
   rename(TotalPop = B25026_001E, 
          Whites = B02001_002E,
          MedHHInc = B19013_001E, 
@@ -383,9 +350,48 @@ We can investigate this problem from multiple angles.
 
 3. Vacancy: tktktk
 
+### Timothy's code & notes
+```{r Timothy_Vars, results='hide'}
+
+## Need to get right variables still --different year has different variable name
+# tracts_year <-  
+#   get_acs(geography = "tract",
+#           
+#           #             Var ID          Intended Name for Column
+#           variables = c("B25026_001E", # given var 1
+#                         "B02001_002E", # given var 2
+#                         "B15001_050E", # given var 3
+#                         "B15001_009E", # given var 4
+#                         "B19013_001E", # given var 5
+#                         "B25058_001E", # given var 6
+#                         "B06012_002E" # given var 7
+#                          # Estimated Total Population by Detailed Race
+#                         ), 
+#           
+#           year=2020, state="DC", geometry=TRUE) %>% 
+#   st_transform('ESRI:102685') %>% # Maryland's State Plane CS
+#   rename(TotalPop = B25026_001E, 
+#          Whites = B02001_002E,
+#          FemaleBachelors = B15001_050E, 
+#          MaleBachelors = B15001_009E,
+#          MedHHInc = B19013_001E, 
+#          MedRent = B25058_001E,
+#          TotalPoverty = B06012_002E
+#          ) %>%
+#   dplyr::select(-NAME, -starts_with("B")) %>%
+#   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+#          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+#          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+#          year = "2020") %>%
+#   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
+```
+
+### xxx's notes
+```{r Name_Vars, results='hide'}
+```
 
 
-```{r sessionInfo include = F}
+```{r sessionInfo, include = F}
 # this makes a text file with the libraries and info about your system (so that you can tell what you needed to run this in the future)
 write(capture.output(sessionInfo()),file="requirements.txt")
 ```
