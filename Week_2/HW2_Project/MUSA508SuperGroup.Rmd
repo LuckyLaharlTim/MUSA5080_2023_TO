@@ -234,3 +234,7 @@ allTracts <- rbind(tracts16,tracts20)
 ```
 
 # UnConverted Code: 'Wrangling Transit Open Data' Forward
+
+```{r sessionInfo}
+write(capture.output(sessionInfo()),file="requirements.txt")
+```
