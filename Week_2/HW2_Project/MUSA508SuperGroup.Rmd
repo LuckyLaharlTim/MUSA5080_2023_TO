@@ -305,7 +305,7 @@ ggplot() +
 Dropping a sample code chunk here that fetches/mutates my variables of interest.
 
 ```{r jamie_acs_vars, results='hide'}
-tracts09 <- 
+tracts09_preRename <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E","B02001_002E",
                         "B19013_001E","B25058_001E",
@@ -315,9 +315,9 @@ tracts09 <-
           year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102685') %>%
-  rename(TotalPop = B25026_001E, 
+  rename(TotalPop = B25026_001E,
          Whites = B02001_002E,
-         MedHHInc = B19013_001E, 
+         MedHHInc = B19013_001E,
          MedRent = B25058_001E,
          TotalPoverty = B06012_002E,
          ForeignBorn = B05012_003E, #new ones begin here
@@ -332,7 +332,7 @@ tracts09 <-
          pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
          avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
          year = "2009") %>%
-  dplyr::select(-Whites, -TotalPoverty, -VacantHHs) 
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
 ```
 
 To summarize the new variables:
@@ -354,36 +354,66 @@ We can investigate this problem from multiple angles.
 ```{r Timothy_Vars, results='hide'}
 
 ## Need to get right variables still --different year has different variable name
-# tracts_year <-  
-#   get_acs(geography = "tract",
-#           
-#           #             Var ID          Intended Name for Column
-#           variables = c("B25026_001E", # given var 1
-#                         "B02001_002E", # given var 2
-#                         "B15001_050E", # given var 3
-#                         "B15001_009E", # given var 4
-#                         "B19013_001E", # given var 5
-#                         "B25058_001E", # given var 6
-#                         "B06012_002E" # given var 7
-#                          # Estimated Total Population by Detailed Race
-#                         ), 
-#           
-#           year=2020, state="DC", geometry=TRUE) %>% 
-#   st_transform('ESRI:102685') %>% # Maryland's State Plane CS
-#   rename(TotalPop = B25026_001E, 
-#          Whites = B02001_002E,
-#          FemaleBachelors = B15001_050E, 
-#          MaleBachelors = B15001_009E,
-#          MedHHInc = B19013_001E, 
-#          MedRent = B25058_001E,
-#          TotalPoverty = B06012_002E
-#          ) %>%
-#   dplyr::select(-NAME, -starts_with("B")) %>%
-#   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
-#          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
-#          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
-#          year = "2020") %>%
-#   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
+tracts_2009 <-
+  get_acs(geography = "tract",
+
+          #             Var ID          Intended Name for Column
+          variables = c("B25026_001E", # total pop
+                        "B02001_002E", # # of whites
+                        "B15001_050E", # # of female w/ bachelor's
+                        "B15001_009E", # # of male w/ bachelor's
+                        "B19013_001E", # median household income
+                        "B25058_001E", # median rent
+                        "B06012_002E", # total poverty
+                        "B01003_001E", # Estimated Total Population
+                        "B05001PR_001E",
+                        "B05001PR_006E",
+                        "B08105G_001E", # total of means of transport to work
+                        "B08105G_004E", # means of transport to work, Public Transportation
+                        "B08119_028E", # total records for earnings of Public Tranit users for means of transport
+                        "B08119_029E",
+                        "B08119_030E",
+                        "B08119_031E",
+                        "B08119_032E",
+                        "B08119_033E",
+                        "B08119_034E",
+                        "B08119_035E",
+                        "B08119_036E",
+                        "B08534_091E", # total respondents for rail/ferryway public transit users travel time to work
+                        "B08534_092E",
+                        "B08534_093E",
+                        "B08534_094E",
+                        "B08534_095E",
+                        "B08534_096E",
+                        "B08534_097E",
+                        "B08534_098E",
+                        "B08534_099E",
+                        "B08534_100E"
+                        ),
+
+          year=2009, state="DC", geometry=TRUE) %>%
+  st_transform('ESRI:102685') # %>% # Maryland's State Plane CS, check if pipe is uncommented
+  # it says none of these variables exist!, I can get estimates and moes though
+  # rename(TotalPop = B25026_001E,
+  #        Whites = B02001_002E,
+  #        FemaleBachelors = B15001_050E,
+  #        MaleBachelors = B15001_009E,
+  #        MedHHInc = B19013_001E,
+  #        MedRent = B25058_001E,
+  #        TotalPoverty = B06012_002E,
+  #        TotalUSCitizens = B05001PR_001E,
+  #        TotalNotCitizens = B05001PR_006E,
+  #        TotalMeansofTransitToWork = B08105G_001E,
+  #        TotalPubTransitUsers = B08105G_004E,
+  #        Total_public_transit_users_reporting_earnings = B08119_028E,
+  #        TotalPubRailUsers = B08534_091E
+  #        ) %>%
+  # dplyr::select(-NAME, -starts_with("B")) %>%
+  # mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+  #        pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+  #        pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+  #        year = "2020") %>%
+  # dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty)
 ```
 
 ### xxx's notes
