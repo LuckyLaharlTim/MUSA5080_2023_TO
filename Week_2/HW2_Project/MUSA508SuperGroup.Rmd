@@ -276,11 +276,11 @@ tracts17 <-
 #no idea if this works yet... need to test
 metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, LINE) %>%
-  st_transform(st_crs(tracts20)) # change tracts20 to tracts## based on years used
+  st_transform('ESRI:102685') #change st_transform if needed
 
 metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, GIS_ID) %>%
-  st_transform(st_crs(tracts20)) 
+  st_transform('ESRI:102685') 
 
 ```
 
@@ -308,11 +308,15 @@ Dropping a sample code chunk here that fetches/mutates my variables of interest.
 ```{r jamie_acs_vars, results='hide'}
 tracts09_preRename <- 
   get_acs(geography = "tract", 
-          variables = c("B25026_001E","B02001_002E",
-                        "B19013_001E","B25058_001E",
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
                         "B06012_002E",
-                        "B05012_003E", "B25002_003E", #new ones begin here
-                        "B25002_001E", "B25071_001E"),
+                        "B05012_003E", 
+                        "B25002_003E", #new ones begin here
+                        "B25002_001E", 
+                        "B25071_001E"),
           year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102685') %>%
