@@ -292,11 +292,11 @@ ggplot() +
   geom_sf(data=tracts09)+
   geom_sf(data=metroStops, 
           show.legend = "point", size=2,
-          color = "#800000")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+          color = "black")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
   geom_sf(data=metroLines, 
-          aes(colour=NAME, size=NAME))+ # Why is color wrong, but it gets the right names?
+          aes(colour=NAME))+
+  geom_line(size=10)+ #JS - I don't think this size adjustment is working
   scale_colour_manual(values=c("blue","green","orange","red","gray","yellow"))+
-  scale_size_manual(values = c(5, 5, 5, 5, 5, 5)) +  # Adjust line width as needed
   labs(color="DC Metro Lines")+
   mapTheme()
 ```
