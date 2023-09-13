@@ -31,9 +31,9 @@ install.packages('sf')
 install.packages('kableExtra')
 ```
 
-This analysis used R's `tidyverse`, `tidycensus`, `kableExtra`, and `sf` packages. In our setup, we load the libraries and set some options for a specific color ramp or preventing scientific notation.
+This analysis used R's `tidyverse`, `tidycensus`, `kableExtra`, and `sf` packages. In our setup, we load the libraries and set some options for a specific color ramp or preventing scientific notation. 
 ```{r code_setup}
-library(dplyr)
+library(dplyr) #added this, not sure why it wasn't loaded in the lab?
 library(tidyverse)
 library(tidycensus)
 library(kableExtra)
@@ -216,7 +216,7 @@ allTracts <- rbind(tracts16,tracts20)
 
 # Code and notes for HW2
 
-## Pulling census tracts and ACS data for 2009 and 2017 (?)
+## Pulling census tracts and ACS data for 2009 and 2017 (?) and joining them
 
 ```{r data_2009, results='hide'}
 tracts09 <- 
@@ -268,12 +268,15 @@ tracts17 <-
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
 ```
 
+```{r}
+allTracts <- rbind(tracts09,tracts17)
+```
+
 ## UnConverted Code: 'Wrangling Transit Open Data' Forward
 
 ## Tried writing something to pull DC metro stations based on code for SEPTA stops - Jamie
 ### Added in Metro lines - Timothy
 ```{r pull_metro_data, results='hide'}
-#no idea if this works yet... need to test
 metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, LINE) %>%
   st_transform('ESRI:102685') #change st_transform if needed
@@ -281,19 +284,23 @@ metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA
 metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, GIS_ID) %>%
   st_transform('ESRI:102685') 
-
 ```
 
 ## View of Metro Stations & Lines
 ```{r view_metro_data}
 ggplot() +
-  geom_sf(data=tracts16)+
-  geom_sf(data=metroStops, show.legend = "point", size=2,color = "#800000")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
-  geom_sf(data=metroLines, aes(color=NAME))+ # Why is color wrong, but it gets the right names?
+  geom_sf(data=tracts09)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=2,
+          color = "#800000")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+  geom_sf(data=metroLines, 
+          aes(colour=NAME, size=NAME))+ # Why is color wrong, but it gets the right names?
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow"))+
+  scale_size_manual(values = c(5, 5, 5, 5, 5, 5)) +  # Adjust line width as needed
   labs(color="DC Metro Lines")+
   mapTheme()
-  
 ```
+
 ## Starting Multiple Ring Buffer
 
 ```{r multipleRingBuffer_test}
@@ -313,8 +320,8 @@ tracts09_preRename <-
                         "B19013_001E",
                         "B25058_001E",
                         "B06012_002E",
-                        "B05012_003E", 
-                        "B25002_003E", #new ones begin here
+                        "B05012_003E", #new ones begin here
+                        "B25002_003E",
                         "B25002_001E", 
                         "B25071_001E"),
           year=2009, state="DC", 
@@ -345,7 +352,7 @@ To summarize the new variables:
 - pctForeignBorn: percent of population born outside the US
 - pctVacant: percent of households that are vacant
 
-The story I want to tell is one of equity in transit-oriented development. Of course, building residential and commercial developments with Metro access optimizes the value of public transit and improves overall mobility, sustainability and economic resilience. Indeed, transit may However, we should consider serving the people being left behind by private free market development and suggest ways to build affordable housing near key assets like commercial corridors and Metro stations.
+The story I want to tell is one of equity in transit-oriented development. Of course, building residential and commercial developments with Metro access optimizes the value of public transit and improves overall mobility, sustainability and economic resilience. However, we should consider serving the people being left behind by private free market development and suggest ways to build affordable housing near key assets like commercial corridors and Metro stations.
 
 We can investigate this problem from multiple angles.
 
