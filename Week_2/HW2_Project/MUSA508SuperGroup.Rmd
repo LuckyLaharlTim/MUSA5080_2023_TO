@@ -301,6 +301,57 @@ ggplot() +
   mapTheme()
 ```
 
+## Generate TOD vs non-TOD
+
+```{r metro_buffer}
+metroBuffers <- 
+  rbind(
+    st_buffer(metroStops, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(metroStops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+ggplot() +
+  geom_sf(data=metroBuffers) +
+  geom_sf(data=metroStops, show.legend = "point") +
+  facet_wrap(~Legend) + 
+  mapTheme()
+```
+
+```{r select_by_centroids}
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedRent.inf = ifelse(year == "2017", MedRent * 1.1426, MedRent)) 
+```
+
+```{r TOD_table}
+allTracts.Summary <- #also no idea if this works, just kind of plugged it in from the lab rmd
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(Rent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              Percent_White = mean(pctWhite, na.rm = T),
+              Percent_Bach = mean(pctBachelors, na.rm = T),
+              Percent_Poverty = mean(pctPoverty, na.rm = T))
+
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
+
 ## Starting Multiple Ring Buffer
 
 ```{r mrb_test}
