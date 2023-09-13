@@ -33,6 +33,7 @@ install.packages('kableExtra')
 
 This analysis used R's `tidyverse`, `tidycensus`, `kableExtra`, and `sf` packages. In our setup, we load the libraries and set some options for a specific color ramp or preventing scientific notation.
 ```{r code_setup}
+library(dplyr)
 library(tidyverse)
 library(tidycensus)
 library(kableExtra)
