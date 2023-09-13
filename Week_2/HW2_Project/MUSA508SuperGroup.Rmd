@@ -303,7 +303,41 @@ ggplot() +
 
 ## Starting Multiple Ring Buffer
 
-```{r multipleRingBuffer_test}
+```{r mrb_test}
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
+                                maxDistance = 47520,
+                                interval =  2640)
+```
+
+```{r visualize_mrb_test}
+ggplot() +
+    geom_sf(data=DCmetro_MRB) +
+    geom_sf(data=metroStops, size=1) +
+    geom_sf(data=st_union(tracts09), fill=NA, size=1.2) +
+    labs(title="Half mile buffers") +
+    mapTheme()
+```
+
+```{r mrb_test_table}
+# JS - haven't tested this chunk, we can take a look later
+tracts09.rings <- tracts09 %>% 
+  select(GEOID, year) %>% 
+  st_centroid() %>% 
+  st_join(DCmetro_MRB, join = st_intersects) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(tracts09, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+tracts09.rings.summary <- st_drop_geometry(tracts09.rings) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+ggplot(tracts09.rings.summary,
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)
 ```
 
 # ACS variable exploration
