@@ -291,12 +291,12 @@ metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA
 ggplot() +
   geom_sf(data=tracts09)+
   geom_sf(data=metroStops, 
-          show.legend = "point", size=2,
+          show.legend = "point", size=1.2,
           color = "black")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
   geom_sf(data=metroLines, 
           aes(colour=NAME))+
-  geom_line(size=10)+ #JS - I don't think this size adjustment is working
-  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow"))+
+  geom_line(size=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2"))+
   labs(color="DC Metro Lines")+
   mapTheme()
 ```
@@ -361,7 +361,7 @@ DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
 ```
 
 ```{r visualize_mrb_test}
-ggplot() +
+ggplot() + # delete this chunk in final markdown
     geom_sf(data=DCmetro_MRB) +
     geom_sf(data=metroStops, size=1) +
     geom_sf(data=st_union(tracts09), fill=NA, size=1.2) +
@@ -445,7 +445,9 @@ We can investigate this problem from multiple angles.
 
 2. Foreign born population: Those who were not born in the US disproportionately grapple with limited English proficiency, unemployment and poor access to needed cultural resources. Transit access provides immigrants with opportunities to travel to language and job training, as well as to communities with shared culture and language.
 
-3. Vacancy: tktktk
+3. Vacancy: Neighborhood vacancy rate is influenced by many factors, one of which being housing demand. A lower vacancy rate can indicate more stress on housing supply and even suggest that an area may be undergoing a housing crisis.
+
+4. Racial and economic segregation: Although Metro access may be associated with increasing land and housing value, those with the greatest access to financial and social resources may also be securing large proportions of limited property around Metro stations and thereby limiting opportunities for less well-resourced communities. Tracking the index of concentration at the extremes over time captures the changing extent of racial and economic segregation in a given area, which is of great interest in an equitable development plan.
 
 ### Timothy's code & notes
 ```{r Timothy_Vars, results='hide'}
