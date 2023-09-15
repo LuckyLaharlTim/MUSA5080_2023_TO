@@ -369,23 +369,25 @@ ggplot() + # delete this chunk in final markdown
     mapTheme()
 ```
 
-```{r mrb_test_table}
-# JS - haven't tested this chunk, we can take a look later
-tracts09.rings <- tracts09 %>% 
-  select(GEOID, year) %>% 
-  st_centroid() %>% 
-  st_join(DCmetro_MRB, join = st_intersects) %>%
+```{r all_tracts_mrb}
+allTracts <- rbind(tracts09,tracts17)
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops), 47520, 2640)
+
+allTracts.rings <-
+  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
+          DCmetro_MRB) %>%
   st_drop_geometry() %>%
-  left_join(dplyr::select(tracts09, GEOID, MedRent, year), 
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
             by=c("GEOID"="GEOID", "year"="year")) %>%
   st_sf() %>%
   mutate(distance = distance / 5280) #convert to miles
-
-tracts09.rings.summary <- st_drop_geometry(tracts09.rings) %>%
+  
+allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
     group_by(distance, year) %>%
     summarize(Mean_Rent = mean(MedRent, na.rm=T))
 
-ggplot(tracts09.rings.summary,
+#this graph is broken...? not sure why
+ggplot(allTracts.rings.summary, 
        aes(distance, Mean_Rent, colour=year)) +
       geom_point(size=3) + 
   geom_line(size=2)
