@@ -304,17 +304,14 @@ ggplot() +
 ## Generate TOD vs non-TOD
 
 ```{r metro_buffer}
-metroBuffers <- 
+buffer <- 
   rbind(
-    st_buffer(metroStops, 2640) %>%
-      mutate(Legend = "Buffer") %>%
-      dplyr::select(Legend),
     st_union(st_buffer(metroStops, 2640)) %>%
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
 
 ggplot() +
-  geom_sf(data=metroBuffers) +
+  geom_sf(data=buffer) +
   geom_sf(data=metroStops, show.legend = "point") +
   facet_wrap(~Legend) + 
   mapTheme()
@@ -371,7 +368,7 @@ ggplot() + # delete this chunk in final markdown
 
 ```{r all_tracts_mrb}
 allTracts <- rbind(tracts09,tracts17)
-DCmetro_MRB <- multipleRingBuffer(st_union(metroStops), 47520, 2640)
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops), 9240, 1320)
 
 allTracts.rings <-
   st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
