@@ -281,6 +281,9 @@ metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA
     dplyr::select(NAME, LINE) %>%
   st_transform('ESRI:102685') #change st_transform if needed
 
+#count lines per station
+metroStops$linecount <- sapply(strsplit(metroStops$LINE, ", "), function(x) length(x))
+
 metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, GIS_ID) %>%
   st_transform('ESRI:102685') 
@@ -349,7 +352,56 @@ kable(allTracts.Summary) %>%
            general = "Table 1.2")
 ```
 
-## Starting Multiple Ring Buffer
+## Submarket analysis by number of lines
+
+```{r}
+oneLineStops <-
+  st_buffer(filter(metroStops, linecount == 1), 2640) %>% st_union() %>%
+  st_sf() %>%
+  #st_difference(centerCity) %>%
+  mutate(Submarket = "One line")
+
+twoLineStops <-
+  st_buffer(filter(metroStops, linecount == 2), 2640) %>% st_union() %>%
+  st_sf() %>%
+  st_difference(oneLineStops) %>%
+  mutate(Submarket = "Two lines")
+
+threeLineStops <-
+  st_buffer(filter(metroStops, linecount >= 3), 2640) %>% st_union() %>%
+  st_sf() %>%
+  st_difference(oneLineStops) %>%
+  mutate(Submarket = "Three or more lines")
+
+threeMarkets <- rbind(oneLineStops, twoLineStops, threeLineStops)
+```
+
+
+```{r}
+allTracts.threeMarkets <-
+  st_join(st_centroid(allTracts), threeMarkets) %>%
+  st_drop_geometry() %>%
+  left_join(allTracts) %>%
+  mutate(Submarket = replace_na(Submarket, "Non-TOD")) %>%
+  st_sf() 
+
+ggplot() +
+  geom_sf(data=allTracts.threeMarkets,
+          aes(fill=Submarket))+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(size=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+
+# make small multiple plots next?
+```
+
+## Multiple Ring Buffer-based analysis
 
 ```{r mrb_test}
 DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
@@ -383,7 +435,6 @@ allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
     group_by(distance, year) %>%
     summarize(Mean_Rent = mean(MedRent, na.rm=T))
 
-#this graph is broken...? not sure why
 ggplot(allTracts.rings.summary, 
        aes(distance, Mean_Rent, colour=year)) +
       geom_point(size=3) + 
