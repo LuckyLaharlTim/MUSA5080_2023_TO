@@ -352,6 +352,61 @@ kable(allTracts.Summary) %>%
            general = "Table 1.2")
 ```
 
+## Graduated symbol map
+
+```{r regenerate_stopbuffer}
+
+selection1 <- 
+  tracts09[buffer,] %>%
+  dplyr::select(TotalPop,MedRent,year) %>%
+  mutate(Selection_Type = "Spatial Selection")
+
+stopBuffer <- st_buffer(metroStops, 2640)
+stopBuffer$ID <- seq_along(stopBuffer$geometry)
+
+TOD_tracts <- selection1 %>% 
+  st_intersection(stopBuffer, selection1)
+
+pop_rent09 <- TOD_tracts %>%
+  st_drop_geometry() %>%
+  group_by(ID) %>%
+  summarize(x = mean(MedRent), y = sum(TotalPop))
+
+symbol_pos <- stopBuffer %>%
+  dplyr::select(ID) %>%
+  st_centroid()
+
+```
+
+```{r grad_symbol_map}
+# Bubble choropleth map
+
+labels_y <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(y)) 
+
+ggplot() +
+  geom_sf(data = tracts09, fill = "grey80") +
+  geom_sf(data = labels_n,
+          pch = 21,
+          aes(size = y),
+          fill = alpha("red", 0.7),
+          col = "grey20") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Population near DC Metro stations, 2009",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  theme(legend.position = "bottom")
+```
+
 ## Submarket analysis by number of lines
 
 ```{r}
