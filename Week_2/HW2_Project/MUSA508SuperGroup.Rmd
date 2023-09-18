@@ -355,27 +355,26 @@ kable(allTracts.Summary) %>%
 ## Submarket analysis by number of lines
 
 ```{r}
-oneLineStops <-
-  st_buffer(filter(metroStops, linecount == 1), 2640) %>% st_union() %>%
+threeLineStops <-
+  st_buffer(filter(metroStops, linecount >= 3), 2640) %>% st_union() %>%
   st_sf() %>%
-  #st_difference(centerCity) %>%
-  mutate(Submarket = "One line")
+  #st_difference(oneLineStops) %>%
+  mutate(Submarket = "Three or more lines")
 
 twoLineStops <-
   st_buffer(filter(metroStops, linecount == 2), 2640) %>% st_union() %>%
   st_sf() %>%
-  st_difference(oneLineStops) %>%
+  st_difference(threeLineStops) %>%
   mutate(Submarket = "Two lines")
 
-threeLineStops <-
-  st_buffer(filter(metroStops, linecount >= 3), 2640) %>% st_union() %>%
+oneLineStops <-
+  st_buffer(filter(metroStops, linecount == 1), 2640) %>% st_union() %>%
   st_sf() %>%
-  st_difference(oneLineStops) %>%
-  mutate(Submarket = "Three or more lines")
+  st_difference(threeLineStops) %>%
+  mutate(Submarket = "One line")
 
 threeMarkets <- rbind(oneLineStops, twoLineStops, threeLineStops)
 ```
-
 
 ```{r}
 allTracts.threeMarkets <-
@@ -393,7 +392,7 @@ ggplot() +
           color = "black")+ 
   geom_sf(data=metroLines, 
           aes(colour=NAME))+
-  geom_line(size=10)+
+  geom_line(linewidth=10)+
   scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
   labs(color="DC Metro Lines")+
   mapTheme()
