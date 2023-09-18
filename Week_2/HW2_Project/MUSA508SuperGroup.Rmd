@@ -376,6 +376,8 @@ symbol_pos <- stopBuffer %>%
   dplyr::select(ID) %>%
   st_centroid()
 
+# Count number of tract centroids per Metro station buffer
+
 ```
 
 ```{r grad_symbol_map}
