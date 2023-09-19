@@ -119,7 +119,7 @@ B <-
 C <-
   ggplot() +
   geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
-  scale_fill_manual(values = palette5,
+  scale_fill_manual(values = palette6,
                     labels = qBr(totalPop16, "estimate"),
                     name = "Total\nPopluation\n(Quintile Breaks)") +
   theme(plot.title = element_text(size=22))
@@ -351,7 +351,18 @@ kable(allTracts.Summary) %>%
   footnote(general_title = "\n",
            general = "Table 1.2")
 ```
-
+# plugged in a different variation (from lab rmd) of the table that unites year and TOD/Non as a column and variable from row and rounds 2 decimal places- JR
+```{r}
+allTracts.Summary %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable() %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
 ## Graduated symbol map
 
 ```{r regenerate_stopbuffer}
@@ -389,12 +400,12 @@ labels_y <- symbol_pos %>%
   arrange(desc(y)) 
 
 ggplot() +
-  geom_sf(data = tracts09, fill = "grey80") +
-  geom_sf(data = labels_n,
+  geom_sf(data = tracts09, fill = "grey90") +
+  geom_sf(data = labels_y,
           pch = 21,
           aes(size = y),
           fill = alpha("red", 0.7),
-          col = "grey20") +
+          col = "black") +
   scale_size(
     range = c(.5, 6),
     guide = guide_legend(
@@ -450,11 +461,45 @@ ggplot() +
   geom_sf(data=metroLines, 
           aes(colour=NAME))+
   geom_line(linewidth=10)+
-  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL))+
   labs(color="DC Metro Lines")+
   mapTheme()
 
 # make small multiple plots next?
+```
+
+
+
+
+```{r}
+st_drop_geometry(allTracts.threeMarkets) %>% #Added a faceted plot for the submarkets feel free to edit
+  group_by(year, Submarket) %>%
+  summarize(Rent = mean(MedRent, na.rm = T),
+            Population = mean(TotalPop, na.rm = T),
+            Percent_White = mean(pctWhite, na.rm = T),
+            Percent_Bach = mean(pctBachelors, na.rm = T),
+            Percent_Poverty = mean(pctPoverty, na.rm = T)) %>%
+  gather(Variable, Value, -year, -Submarket) %>%
+  ggplot(aes(year, Value, fill = Submarket)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=5) +
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL))+
+  labs(title = "Indicator differences across submarkets") +
+  plotTheme() + theme(legend.position="bottom")
+```
+```{r} 
+  ggplot(allTracts.threeMarkets)+ #plugged in the chunk from lab, adjust for variables 
+    geom_sf(data = st_union(allTracts.threeMarkets))+
+    geom_sf(aes(fill = q5(MedRent))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red")+
+    scale_fill_manual(values = palette5,
+                      labels = qBr(allTracts.group, "MedRent.inf"),
+                      name = "Rent\n(Quintile Breaks)") +
+    labs(title = "Median Rent 2009-2017", subtitle = "Real Dollars") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+    
 ```
 
 ## Multiple Ring Buffer-based analysis
