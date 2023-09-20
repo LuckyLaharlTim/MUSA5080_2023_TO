@@ -296,7 +296,7 @@ ggplot() +
   geom_sf(data=tracts09)+
   geom_sf(data=metroStops, 
           show.legend = "point", size=1.2,
-          color = "black")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+          color = "black")+ 
   geom_sf(data=metroLines, 
           aes(colour=NAME))+
   geom_line(size=10)+
@@ -425,11 +425,11 @@ labels_y <- symbol_pos %>%
 
 ggplot() +
   geom_sf(data = tracts09, fill = "grey80") +
-  geom_sf(data = labels_n,
-          pch = 21,
-          aes(size = y),
-          fill = alpha("red", 0.7),
-          col = "grey20") +
+  # geom_sf(data = labels_n,
+  #         pch = 21,
+  #         aes(size = y),
+  #         fill = alpha("red", 0.7),
+  #         col = "grey20") +
   scale_size(
     range = c(.5, 6),
     guide = guide_legend(
@@ -601,8 +601,8 @@ We can investigate this problem from multiple angles.
 4. Racial and economic segregation: Although Metro access may be associated with increasing land and housing value, those with the greatest access to financial and social resources may also be securing large proportions of limited property around Metro stations and thereby limiting opportunities for less well-resourced communities. Tracking the index of concentration at the extremes over time captures the changing extent of racial and economic segregation in a given area, which is of great interest in an equitable development plan.
 
 ### Timothy's code & notes
-#### Getting ACS Data for 3 Years & Column Mutations
 
+#### Getting ACS Data for 3 Years & Column Mutations
 ```{r testing}
 tracts2009 <- 
   get_acs(geography = "tract", 
@@ -657,10 +657,10 @@ tracts2009 <-
          avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
          PubTrans_LT30 = C08134_032E+C08134_033E+C08134_034E+C08134_035E+C08134_036E,
          PubTrans_30To59 = C08134_037E+C08134_038E+C08134_039E,
-         pctTransitCommute = TotalTransitCommuters/WorkTransTotal, # ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0)
-         pctPubTrans_LT30 = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
-         pctPubTrans_30To59 = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
-         pctPubTrans_HourUp = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
+         TransitCommutePercentage = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0),
+         PubTrans_LT30Per = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
+         PubTrans_30To59Per = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
+         PubTrans_HourUpPer = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
          year = "2009") %>%
   dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
 ```
@@ -719,10 +719,10 @@ tracts2017 <-
          avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
          PubTrans_LT30 = B08134_062E+B08134_063E+B08134_064E+B08134_065E+B08134_066E,
          PubTrans_30To59 = B08134_067E+B08134_068E+B08134_069E,
-         pctTransitCommute = TotalTransitCommuters/WorkTransTotal, # ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0)
-         pctPubTrans_LT30 = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
-         pctPubTrans_30To59 = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
-         pctPubTrans_HourUp = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
+         TransitCommutePercentage = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0),
+         PubTrans_LT30Per = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
+         PubTrans_30To59Per = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
+         PubTrans_HourUpPer = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
          year = "2017") %>%
   dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
 ```
@@ -781,10 +781,10 @@ tracts2020 <-
          avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
          PubTrans_LT30 = B08134_062E+B08134_063E+B08134_064E+B08134_065E+B08134_066E,
          PubTrans_30To59 = B08134_067E+B08134_068E+B08134_069E,
-         pctTransitCommute = TotalTransitCommuters/WorkTransTotal, # ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0)
-         pctPubTrans_LT30 = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
-         pctPubTrans_30To59 = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
-         pctPubTrans_HourUp = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
+         TransitCommutePercentage = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0),
+         PubTrans_LT30Per = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
+         PubTrans_30To59Per = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
+         PubTrans_HourUpPer = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
          year = "2020") %>%
   dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
 ```
@@ -794,7 +794,7 @@ tracts2020 <-
  `r allTracts <- rbind(tracts2009,tracts2017,tracts2020)`
 
 #### Retrieve Metro Data 
-```{r pull_metro_data_w3, results='hide'}
+```{r pull_metro_data, results='hide'}
 metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
     dplyr::select(NAME, LINE) %>%
   ## works in console line by line, but not here?
@@ -813,7 +813,7 @@ metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA
 ```
 
 #### View of Metro Stations & Lines
-```{r view_metro_data_wSpice}
+```{r view_metro_data}
 ggplot() +
   geom_sf(data=allTracts,fill = "#75AEFB", color = "#343434")+ # skyblue = "#87CEEB"
   geom_sf(data=metroStops, 
@@ -822,14 +822,14 @@ ggplot() +
   geom_sf(data=metroLines, 
           aes(colour=NAME))+
   geom_line(size=10)+ #JS - I don't think this size adjustment is working
-  scale_colour_manual(values=stops_palette)+
+  scale_colour_manual(values=c("#0000FF","green","orange","red","gray","yellow"))+
   labs(color="DC Metro Lines")+
   mapTheme()
 ```
 
 #### Generate TOD vs non-TOD
 
-```{r metro_buffer_w3}
+```{r metro_buffer}
 metroBuffers <- 
   rbind(
     st_buffer(metroStops, 2640) %>% # half-mile
@@ -848,7 +848,7 @@ ggplot() +
   mapTheme()
 ```
 
-```{r select_by_centroids_w3}
+```{r select_by_centroids}
 allTracts.group <- 
   rbind(
     st_centroid(allTracts)[buffer,] %>%
@@ -864,16 +864,22 @@ allTracts.group <-
   mutate(MedRent.inf = ifelse(year == "2017", MedRent * 1.1426, MedRent)) 
 ```
 
-```{r TOD_table_pctTravelTimes}
-allTracts.Summary <- #also no idea if this works, just kind of plugged it in from the lab rmd
+```{r summaryTable_and_kable}
+allTracts.Summary <- 
   st_drop_geometry(allTracts.group) %>%
     group_by(year, TOD) %>%
-    summarize(Rent = mean(MedRent, na.rm = T),
+    summarize(CRent = mean(MedRent, na.rm = T),
               Population = mean(TotalPop, na.rm = T),
               # Percent_PublicTransit = mean(TransitCommutePercentage, na.rm = T), # not sure why this column is never added to table
-              Percent_LowTravelTime = mean(pctPubTrans_LT30*100, na.rm = T),
-              Percent_HalfToHourTravelTime = mean(pctPubTrans_30To59*100, na.rm = T),
-              Percent_HourPlusTravelTime = mean(pctPubTrans_HourUp*100, na.rm = T))
+              LowTT = mean(pctPubTrans_LT30*100, na.rm = T),
+              MedTT = mean(pctPubTrans_30To59*100, na.rm = T),
+              HourPlusTT = mean(pctPubTrans_HourUp*100, na.rm = T),
+              HH_Count = mean(TotalHHs,na.rm=T),
+              GRent = mean(MedGrossRent,na.rm=T),
+              RentPorIncome = mean(RentPortionOfInc,na.rm=T),
+              Poverty = mean(pctPoverty,na.rm=T),
+              Foreign = mean(pctForeignBorn,na.rm=T),
+              Vacancies = mean(pctVacant,na.rm=T))
 
 kable(allTracts.Summary) %>%
   kable_styling() %>%
@@ -881,15 +887,94 @@ kable(allTracts.Summary) %>%
            general = "Table 1.2")
 ```
 
-#### Starting Multiple Ring Buffer
 
-```{r mrb_test_w3}
+#### Making Indicator Variable Visualizations (TOD & Non-TOD)
+```{r tryingVisualizations}
+
+listLabs <- c("Percent of Short-Trip Public Transportation Commuters","Percent of Medium-Trip Public Transportation Commuters","Percent of Long-Trip Public Transportation Commuters")
+# quintiles <- c(allTracts.group%>%filter(variable == "pctPubTrans_LT30"),allTracts.group%>%filter(variable == "pctPubTrans_30To59"),allTracts.group%>%filter(variable == "pctPubTrans_HourUp"))
+# for low travel times
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "orange", aes(fill = q5(pctPubTrans_LT30)))+
+  # geom_sf(data=DCmetro_MRB,fill="transparent",color="purple") + # crystal green #A4D579; black used for color before: #343434
+  geom_sf(data=metroStops, show.legend = "point") +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,pctPubTrans_LT30*100, listLabs[1]))+
+  mapTheme()
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "orange", aes(fill = q5(pctPubTrans_30To59)))+
+  # geom_sf(data=DCmetro_MRB,fill="transparent",color="purple") + # crystal green #A4D579; black used for color before: #343434
+  geom_sf(data=metroStops, show.legend = "point") +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,pctPubTrans_30To59*100, listLabs[2]))+
+  mapTheme()
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "orange", aes(fill = q5(pctPubTrans_HourUp)))+
+  # geom_sf(data=DCmetro_MRB,fill="transparent",color="purple") + # crystal green #A4D579; black used for color before: #343434
+  geom_sf(data=metroStops, show.legend = "point") +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,pctPubTrans_HourUp*100, listLabs[3]))+
+  mapTheme()
+
+
+```
+
+
+##### grouped bar plot of same
+
+Some Definitions of housing Variable Concepts [here](https://www.census.gov/housing/hvs/definitions.pdf)
+
+```{r barPlots}
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(CRent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              # Percent_PublicTransit = mean(TransitCommutePercentage, na.rm = T), # not sure why this column is never added to table
+              LowTT = mean(pctPubTrans_LT30*100, na.rm = T),
+              MedTT = mean(pctPubTrans_30To59*100, na.rm = T),
+              HourPlusTT = mean(pctPubTrans_HourUp*100, na.rm = T),
+              HH_Count = mean(TotalHHs,na.rm=T),
+              GRent = mean(MedGrossRent,na.rm=T),
+              RentPorIncome = mean(RentPortionOfInc,na.rm=T),
+              Poverty = mean(pctPoverty,na.rm=T),
+              Foreign = mean(pctForeignBorn,na.rm=T),
+              Vacancies = mean(pctVacant,na.rm=T))
+
+# bar plots
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=6) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "Indicator differences across time and space") +
+  plotTheme() + theme(legend.position="bottom")
+```
+
+
+##### table of same
+```{r tables}
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
+
+#### geom_line plot (last part of code & notes)
+
+##### Starting Multiple Ring Buffer
+
+```{r mrb_test}
 DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
                                 maxDistance = 2640*5, # or 2640
                                 interval =  2640)
 ```
 
-```{r visualize_mrb_test_w3}
+```{r visualize_mrb_test}
 ggplot() +
     geom_sf(data=DCmetro_MRB) +
     geom_sf(data=metroStops, size=1) +
@@ -898,9 +983,9 @@ ggplot() +
     mapTheme()
 ```
 
+##### displaying buffer data table (line plot)
 
-#### displaying buffer data table (line plot)
-```{r mrb_test_table_w3}
+```{r mrb_test_table}
 # adding allTracts.rings
 allTracts.rings <- 
   allTracts %>% 
@@ -923,7 +1008,6 @@ ggplot(allTracts.rings.summary,
   geom_line(size=2)
 ```
 
-
 Years 2017 & 2020 had the same references for variables, so the jump from 2009 -> the 2017/2020 is where you might want to be careful.
 
 Added in ...
@@ -937,6 +1021,12 @@ Added in ...
 
 There's a small desire to see if work commute time is a factor in higher median rent for specific tracts/block groups & if the trend changes across years.
 - Note to self, changes to variables end by noon Wednesday, 9/21
+
+
+
+
+
+
 
 ### xxx's notes
 ```{r Name_Vars, results='hide'}
