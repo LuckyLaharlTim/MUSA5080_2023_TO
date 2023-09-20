@@ -45,6 +45,7 @@ options(scipen=999)
 options(tigris_class="sf")
 # set colors for 5 color ramp in palette5
 palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
+stops_palette <- c("#0000FF","green","orange","red","gray","yellow")
 
 # set source url to grab functions from MUSA 5080 book
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
