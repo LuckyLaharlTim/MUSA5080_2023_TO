@@ -352,6 +352,40 @@ kable(allTracts.Summary) %>%
            general = "Table 1.2")
 ```
 
+### Testing out spatial selection
+
+```{r spatial_selection_test}
+qtr_buffer <- #generate quarter mile buffer for slightly more conservative selection
+  rbind(
+    st_union(st_buffer(metroStops, 1320)) %>%
+      st_sf())
+
+TOD_selection <- 
+  allTracts[qtr_buffer,] %>%
+  #dplyr::select(TotalPop) %>%
+  mutate(TOD = "TOD")
+
+non_TOD_selection <-
+  allTracts[qtr_buffer, op = st_disjoint] %>%
+  #dplyr::select(TotalPop) %>%
+  mutate(TOD = "Non-TOD")
+
+selection_allTracts <- rbind(TOD_selection, non_TOD_selection)
+
+ggplot() +
+  geom_sf(data=selection_allTracts,
+          aes(fill=TOD))+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(linewidth=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+```
+
 ## Graduated symbol map
 
 ```{r regenerate_stopbuffer}
@@ -499,6 +533,16 @@ ggplot(allTracts.rings.summary,
 
 # ACS variable exploration
 
+```{r load_variable_lists}
+acs_variable_list.2009 <- load_variables(2009, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+                                         
+acs_variable_list.2017 <- load_variables(2017, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+```
+
 ### Jamie's notes
 
 Dropping a sample code chunk here that fetches/mutates my variables of interest.
@@ -514,7 +558,7 @@ tracts09_preRename <-
                         "B05012_003E", #new ones begin here
                         "B25002_003E",
                         "B25002_001E", 
-                        "B25071_001E"),
+                        "B25071_001E",),
           year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102685') %>%
@@ -547,7 +591,7 @@ The story I want to tell is one of equity in transit-oriented development. Of co
 
 We can investigate this problem from multiple angles.
 
-1. Rent burden: As rent rises and income remains constant, the percentage of income spent on rent must rise as well. This percentage represents a key factor in whether residents must relocate because of rent unaffordability. It is most critical for lower income residents because they have less disposable income and limited options for relocation.
+1. Rent burden: As rent rises and income remains constant, the percentage of income spent on rent must rise as well. This percentage represents a key factor in whether residents must relocate because of rising rents that become unaffordable. It is most critical for lower income residents because they have less disposable income and limited options for relocation.
 
 2. Foreign born population: Those who were not born in the US disproportionately grapple with limited English proficiency, unemployment and poor access to needed cultural resources. Transit access provides immigrants with opportunities to travel to language and job training, as well as to communities with shared culture and language.
 
