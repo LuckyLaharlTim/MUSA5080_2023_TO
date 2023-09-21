@@ -407,12 +407,17 @@ pop_rent09 <- TOD_tracts %>%
   group_by(ID) %>%
   summarize(x = mean(MedRent, na.rm = T), y = sum(TotalPop, na.rm = T))
 
+# alternate if you want to show all Population plots & note NA values in X (or remove them)
+pop_rent2009 <- TOD_tracts %>%
+  st_drop_geometry() %>%
+  group_by(ID) %>%
+  summarize(x = mean(MedRent), y = sum(TotalPop),removed_x=!complete.cases(mean(MedRent)))
+
 symbol_pos <- stopBuffer %>%
   dplyr::select(ID) %>%
   st_centroid()
 
 ```
-
 ```{r grad_symbol_maps}
 
 labels_y <- symbol_pos %>%
@@ -420,6 +425,71 @@ labels_y <- symbol_pos %>%
             by = c("ID" = "ID")) %>%
   arrange(desc(y)) 
 
+ggplot() +
+geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = y),
+          fill = alpha("blue", 0.7),
+          col = "gray30") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+labs(title = "Population near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+
+labels_x <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x)) 
+
+ggplot() +
+  geom_sf(data = allTracts.group, 
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_x,
+          pch = 21,
+          aes(size = x),
+          fill = alpha("red", 0.7),
+          col = "gray30") +
+  scale_size(
+    range = c(.5, 4),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Means of median rents near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+```
+
+
+```{r grad_symbol_maps_for_pop_rent_2009, warning=FALSE}
+# Graduated Symbol Map
+labels_y <- symbol_pos %>%
+  left_join(pop_rent2009,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(y)) 
+
+min <- min(labels_y$x,na.rm=TRUE)
+med <- median(labels_y$x,na.rm=TRUE)
+q1 <- summary(labels_y$x)[2]
+
+# for population
 ggplot() +
   geom_sf(data = allTracts.group,
           fill = "gray95",
@@ -443,22 +513,29 @@ ggplot() +
   facet_wrap(~year) +
   theme(legend.position = "bottom")
 
-labels_x <- symbol_pos %>%
-  left_join(pop_rent09,
+labels_y <- symbol_pos %>%
+  left_join(pop_rent2009,
             by = c("ID" = "ID")) %>%
-  arrange(desc(x)) 
+  arrange(desc(x))
 
+# for rent (per month)
 ggplot() +
-  geom_sf(data = allTracts.group, 
+  geom_sf(data = allTracts.group,
           fill = "gray95",
           color = "gray") +
-  geom_sf(data = labels_x,
+  geom_sf(data = labels_y,
           pch = 21,
-          aes(size = x),
+          aes(size = ifelse(removed_x,NA,x)),
+          # aes_string(ifelse(removed_x,"Undefined Stop",x)),
           fill = alpha("red", 0.7),
           col = "gray30") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = ifelse(!removed_x,NA,q1)),
+          fill = alpha("gray72", 0.7),
+          col = "gray30") +
   scale_size(
-    range = c(.5, 4),
+    range = c(.5, 6),
     guide = guide_legend(
       direction = "horizontal",
       nrow = 1,
