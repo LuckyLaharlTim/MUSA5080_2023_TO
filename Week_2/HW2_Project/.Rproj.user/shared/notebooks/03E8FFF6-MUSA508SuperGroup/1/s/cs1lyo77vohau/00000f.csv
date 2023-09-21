@@ -1,0 +1,4 @@
+"0",""
+"0","totalPop16 <-"
+"0","  tracts16 %>%"
+"0","  filter(variable == ""B25026_001"")"

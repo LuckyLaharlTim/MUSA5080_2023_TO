@@ -1,0 +1,6 @@
+"0","ggplot() + # delete this chunk in final markdown"
+"0","    geom_sf(data=DCmetro_MRB) +"
+"0","    geom_sf(data=metroStops, size=1) +"
+"0","    geom_sf(data=st_union(tracts09), fill=NA, size=1.2) +"
+"0","    labs(title=""Half mile buffers"") +"
+"0","    mapTheme()"
