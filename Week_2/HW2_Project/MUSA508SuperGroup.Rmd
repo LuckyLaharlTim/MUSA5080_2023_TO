@@ -392,7 +392,7 @@ ggplot() +
 ```{r regenerate_stopbuffer}
 
 selection1 <- 
-  tracts09[buffer,] %>%
+  allTracts.group[buffer,] %>%
   dplyr::select(TotalPop,MedRent,year) %>%
   mutate(Selection_Type = "Spatial Selection")
 
@@ -404,48 +404,46 @@ TOD_tracts <- selection1 %>%
 
 pop_rent09 <- TOD_tracts %>%
   st_drop_geometry() %>%
-  group_by(ID) %>%
+  group_by(ID,year) %>%
   summarize(x = mean(MedRent, na.rm = T), y = sum(TotalPop, na.rm = T))
-
-# alternate if you want to show all Population plots & note NA values in X (or remove them)
-pop_rent2009 <- TOD_tracts %>%
-  st_drop_geometry() %>%
-  group_by(ID) %>%
-  summarize(x = mean(MedRent), y = sum(TotalPop),removed_x=!complete.cases(mean(MedRent)))
 
 symbol_pos <- stopBuffer %>%
   dplyr::select(ID) %>%
   st_centroid()
 
 ```
+
 ```{r grad_symbol_maps}
+# Bubble choropleth maps
 
 labels_y <- symbol_pos %>%
   left_join(pop_rent09,
             by = c("ID" = "ID")) %>%
   arrange(desc(y)) 
 
-ggplot() +
-geom_sf(data = allTracts.group,
+ggplot() + #try to split these into discrete var
+  geom_sf(data = allTracts.group,
           fill = "gray95",
           color = "gray") +
   geom_sf(data = labels_y,
+          aes(size = y,
+              fill = y),#ask ed discussion why this isnt combining
           pch = 21,
-          aes(size = y),
-          fill = alpha("blue", 0.7),
           col = "gray30") +
   scale_size(
-    range = c(.5, 6),
+    range = c(1, 4),
     guide = guide_legend(
       direction = "horizontal",
       nrow = 1,
       label.position = "bottom")) +
   guides(fill = guide_legend(title = "")) +
-labs(title = "Population near DC Metro stations",
+  scale_fill_gradient(low = "white", high = "blue3") +
+  labs(title = "Population near Washington Metro stations",
        sub = "Based on 1/2 mile buffers",
        size = "") +
   theme_void() +
   facet_wrap(~year) +
+  mapTheme2()+
   theme(legend.position = "bottom")
 
 labels_x <- symbol_pos %>%
@@ -459,21 +457,23 @@ ggplot() +
           color = "gray") +
   geom_sf(data = labels_x,
           pch = 21,
-          aes(size = x),
-          fill = alpha("red", 0.7),
+          aes(size = x,
+              fill = x),
           col = "gray30") +
   scale_size(
-    range = c(.5, 4),
+    range = c(1, 4),
     guide = guide_legend(
       direction = "horizontal",
       nrow = 1,
       label.position = "bottom")) +
   guides(fill = guide_legend(title = "")) +
-  labs(title = "Means of median rents near DC Metro stations",
+  scale_fill_gradient(low = "yellow", high = "red3") +
+  labs(title = "Means of median rents in census tracts near Metro stations",
        sub = "Based on 1/2 mile buffers",
        size = "") +
   theme_void() +
   facet_wrap(~year) +
+  mapTheme2() +
   theme(legend.position = "bottom")
 ```
 
