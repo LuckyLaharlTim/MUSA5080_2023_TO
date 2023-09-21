@@ -782,6 +782,81 @@ We can investigate this problem from multiple angles.
 4. Racial and economic segregation: Although Metro access may be associated with increasing land and housing value, those with the greatest access to financial and social resources may also be securing large proportions of limited property around Metro stations and thereby limiting opportunities for less well-resourced communities. Tracking the index of concentration at the extremes over time captures the changing extent of racial and economic segregation in a given area, which is of great interest in an equitable development plan.
 
 
+### Proportion of income spent on rent (and rent burden)
+
+When a household spends over 30% of its income on rent, it is defined as being rent burdened. Spending over 50% of income on rent is defined as severe rent burden. This indicator assesses housing affordability for a census tract's residents.
+
+```{r TOD_indicator_map_rentburden}
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=q5(RentBurden)),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=100)+
+  scale_fill_viridis(discrete=T,
+                     direction=-1,
+                     option="rocket",
+                     begin=0.2,
+                     end=0.8,
+                     labels=qBr(allTracts.group,"RentBurden"))+
+  scale_colour_manual(values=c("blue","green","orange","red","gray75","yellow2",
+                               NULL,NULL,NULL,NULL)) +
+  labs(color="Metro Lines",
+       title="Percent of income spent on rent, by census tract",
+       fill="% of income to rent",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers") +
+  facet_wrap(~year) +
+  mapTheme()
+```
+
+Overall, rent burden seemed to decrease across DC between 2009 and 2019. While housing became more affordable given residents' incomes, median household income may have increased across DC, meaning that housing prices did not necessarily decrease.
+
+### Housing vacancy
+
+Neighborhood vacancy rate is influenced by many factors, one of which being housing demand. A lower vacancy rate can indicate more stress on housing supply and even suggest that an area may be undergoing a housing crisis.
+
+```{r TOD_indicator_map_vacancy}
+br <- c(0, .1, .25, .5, 1)
+
+allTracts.group$pctVacantCat <- cut(allTracts.group$pctVacant,
+                                         breaks = br,
+                                         dig.lab = 5)
+
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=pctVacantCat),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=100)+
+  scale_fill_viridis(discrete=T,
+                     na.value="gray45",
+                     labels=c("0-10%","10-25%","25-50%","50-100%","N/A"))+
+  scale_color_manual(values=c("blue","green","orange","red","gray75","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="Metro Lines",
+       fill="Vacancy rate",
+       title="Vacancy rate by census tract",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers")+
+  facet_wrap(~year)+
+  mapTheme()
+```
+
+Although vacancy rate did not change greatly across the city, a few notable tracts within the TOD areas in Navy Yard, NoMa and Dupont Circle decreased their vacancy rates significantly between 2009 and 2019. This may reflect the great deal of transit-oriented development that occurred in these areas prior to 2009, then properties being purchased and/or rented as real estate demand grew between then and 2019.
+
+
 ### Timothy's code & notes
 
 #### Getting ACS Data for 3 Years & Column Mutations
