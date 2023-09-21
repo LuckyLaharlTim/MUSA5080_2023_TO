@@ -1,0 +1,6 @@
+"0","ggplot() +"
+"0","  geom_sf(data=metroBuffers) +"
+"0","  geom_sf(data=metroStops, show.legend = ""point"") +"
+"0","  facet_wrap(~Legend) + "
+"0","  labs(caption = ""Figure 2.6"") +"
+"0","  mapTheme()"
