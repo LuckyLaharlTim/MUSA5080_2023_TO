@@ -425,11 +425,11 @@ labels_y <- symbol_pos %>%
 
 ggplot() +
   geom_sf(data = tracts09, fill = "grey80") +
-  # geom_sf(data = labels_n,
-  #         pch = 21,
-  #         aes(size = y),
-  #         fill = alpha("red", 0.7),
-  #         col = "grey20") +
+   geom_sf(data = labels_y,
+           pch = 21,
+           aes(size = y),
+           fill = alpha("red", 0.7),
+           col = "grey20") +
   scale_size(
     range = c(.5, 6),
     guide = guide_legend(
@@ -442,6 +442,38 @@ ggplot() +
        size = "") +
   theme_void() +
   theme(legend.position = "bottom")
+```
+# Grad Map for Rent
+```{r grad_symbol_map}
+# Bubble choropleth map
+
+labels_y <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x)) 
+
+ggplot() +
+  geom_sf(data = allTracts.group, fill = "#DFED6B") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = x),
+          fill = alpha("#0868ac", 0.8),
+          col = "black") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Median Rent Near DC Metro stations, 2009",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  #theme_void() +
+  theme(legend.position = "bottom") +
+  labs(caption = "Figure x.x DC Median Rent") +
+  facet_wrap(~year) +
+  theme(plot.caption = element_text(hjust=0))
 ```
 
 ## Submarket analysis by number of lines
@@ -467,6 +499,37 @@ oneLineStops <-
 
 threeMarkets <- rbind(oneLineStops, twoLineStops, threeLineStops)
 ```
+# Adusted submarket map colors - Trying to add some transparency to the TOD and non to help the metro lines pop  and I failed..still working on it. 
+```{r}
+
+submarket_colors <- c("Non-TOD" = "grey90", "One line" = "orangered3", "Two lines" =  "red", "Three or more lines" = "brown")
+
+allTracts.threeMarkets <-
+  st_join(st_centroid(allTracts), threeMarkets) %>%
+  st_drop_geometry() %>%
+  left_join(allTracts) %>%
+  mutate(Submarket = replace_na(Submarket, "Non-TOD")) %>%
+  st_sf() 
+
+ggplot() +
+  geom_sf(data=allTracts.threeMarkets,
+          aes(fill=Submarket))+
+  geom_sf(data=allTracts.threeMarkets,
+          aes(fill=Submarket))+
+    geom_sf(data=allTracts.threeMarkets,
+          aes(fill=Submarket))+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(linewidth=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL))+
+  scale_fill_manual(values = submarket_colors) +
+  labs(color="DC Metro Lines")+
+  mapTheme()
+```
+# make small multiple plots next?
 
 ```{r}
 allTracts.threeMarkets <-
@@ -490,6 +553,43 @@ ggplot() +
   mapTheme()
 
 # make small multiple plots next?
+```
+
+# I Need to figure out how to change the greay in variable title and how to make sure name does not get cut off
+```{r}
+submarket_colors_graph <- c("Non-TOD" = "grey24", "One line" = "orange", "Two lines" =  "red", "Three or more lines" = "brown")
+st_drop_geometry(allTracts.threeMarkets) %>% #Added a faceted plot for the submarkets feel free to edit
+  group_by(year, Submarket) %>%
+  summarize(Rent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              Percent_RentBurden = mean(pctPopRentBurden, na.rm = T),
+              Percent_Vacan = mean(pctVacant, na.rm = T),
+              Percent_Non_White = mean(pctNonWhite, na.rm = T),
+              Percent_Poverty = mean(pctPoverty, na.rm = T)) %>%
+  gather(Variable, Value, -year, -Submarket) %>%
+  ggplot(aes(year, Value, fill = Submarket)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=5) +
+  scale_fill_manual(values = submarket_colors_graph) +
+  labs(title = "Indicator differences across submarkets") +
+  plotTheme() + theme(legend.position="bottom")
+```
+
+#  small multiple plots - adujst for variables
+
+```{r}
+  ggplot(allTracts.threeMarkets)+ #plugged in the chunk from lab, adjust for variables 
+    geom_sf(data = st_union(allTracts.threeMarkets))+
+    geom_sf(aes(fill = q5(pctNonWhite))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red", linewidth = 0.7)+
+    scale_fill_manual(values = palette6,
+                      labels = qBr(allTracts.group, "pctNonWhite"),
+                      name = "Percent of Population\n(Quantile Breaks)") +
+    labs(title = "Percent of Non-White Population", subtitle = "2009-2017 DC Metro Area with 1/2 mile station buffers") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+    
 ```
 
 ## Multiple Ring Buffer-based analysis
