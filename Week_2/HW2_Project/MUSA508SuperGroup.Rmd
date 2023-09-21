@@ -405,18 +405,15 @@ TOD_tracts <- selection1 %>%
 pop_rent09 <- TOD_tracts %>%
   st_drop_geometry() %>%
   group_by(ID) %>%
-  summarize(x = mean(MedRent), y = sum(TotalPop))
+  summarize(x = mean(MedRent, na.rm = T), y = sum(TotalPop, na.rm = T))
 
 symbol_pos <- stopBuffer %>%
   dplyr::select(ID) %>%
   st_centroid()
 
-# Count number of tract centroids per Metro station buffer
-
 ```
 
-```{r grad_symbol_map}
-# Bubble choropleth map
+```{r grad_symbol_maps}
 
 labels_y <- symbol_pos %>%
   left_join(pop_rent09,
@@ -424,12 +421,14 @@ labels_y <- symbol_pos %>%
   arrange(desc(y)) 
 
 ggplot() +
-  geom_sf(data = tracts09, fill = "grey80") +
-  # geom_sf(data = labels_n,
-  #         pch = 21,
-  #         aes(size = y),
-  #         fill = alpha("red", 0.7),
-  #         col = "grey20") +
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = y),
+          fill = alpha("blue", 0.7),
+          col = "gray30") +
   scale_size(
     range = c(.5, 6),
     guide = guide_legend(
@@ -437,13 +436,42 @@ ggplot() +
       nrow = 1,
       label.position = "bottom")) +
   guides(fill = guide_legend(title = "")) +
-  labs(title = "Population near DC Metro stations, 2009",
+  labs(title = "Population near DC Metro stations",
        sub = "Based on 1/2 mile buffers",
        size = "") +
   theme_void() +
+  facet_wrap(~year) +
   theme(legend.position = "bottom")
-```
 
+labels_x <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x)) 
+
+ggplot() +
+  geom_sf(data = allTracts.group, 
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_x,
+          pch = 21,
+          aes(size = x),
+          fill = alpha("red", 0.7),
+          col = "gray30") +
+  scale_size(
+    range = c(.5, 4),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Means of median rents near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+
+```
 ## Submarket analysis by number of lines
 
 ```{r}
@@ -546,10 +574,10 @@ acs_variable_list.2017 <- load_variables(2017, #year
 
 ### Jamie's notes
 
-Dropping a sample code chunk here that fetches/mutates my variables of interest.
+Dropping a sample code chunk here that fetches/mutates my variables of interest, also calculates ICE scores for TOD areas by year.
 
-```{r jamie_acs_vars, results='hide'}
-tracts09_preRename <- 
+```{r data_2009, results='hide'}
+tracts09 <- 
   get_acs(geography = "tract", 
           variables = c("B25026_001E",
                         "B02001_002E",
@@ -559,7 +587,10 @@ tracts09_preRename <-
                         "B05012_003E", #new ones begin here
                         "B25002_003E",
                         "B25002_001E", 
-                        "B25071_001E",),
+                        "B25071_001E",
+                        "B19001_001E", #ICE-all households of all incomes
+                        "B19001A_014E","B19001A_015E","B19001A_016E","B19001A_017E", #ICE-white>100k
+                        "B19001B_002E","B19001B_003E","B19001B_004E","B19001B_005E"),#ICE-black<25k
           year=2009, state="DC", 
           geometry=TRUE, output="wide") %>%
   st_transform('ESRI:102685') %>%
@@ -571,22 +602,95 @@ tracts09_preRename <-
          ForeignBorn = B05012_003E, #new ones begin here
          TotalHHs = B25002_001E,
          VacantHHs = B25002_003E,
-         RentBurden = B25071_001E
-         ) %>%
-  dplyr::select(-NAME, -starts_with("B")) %>%
+         RentBurden = B25071_001E,
+         ICE_T = B19001_001E) %>%
   mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
          pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
          pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
          avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         ICE_A = ifelse(TotalHHs > 0, 
+                      (B19001A_014E+B19001A_015E+B19001A_016E+B19001A_017E), 0),
+         ICE_P = ifelse(TotalHHs > 0, 
+                      (B19001B_002E+B19001B_003E+B19001B_004E+B19001B_005E), 0),
+         ICE_tract = (ICE_A - ICE_P)/ICE_T,
          year = "2009") %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
   dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
+```
+
+```{r data_2017, results='hide'}
+tracts17 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        "B05012_003E", #new ones begin here
+                        "B25002_003E",
+                        "B25002_001E", 
+                        "B25071_001E",
+                        "B19001_001E", #ICE-all households of all incomes
+                        "B19001A_014E","B19001A_015E","B19001A_016E","B19001A_017E", #ICE-white>100k
+                        "B19001B_002E","B19001B_003E","B19001B_004E","B19001B_005E"),#ICE-black<25k
+          year=2017, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         RentBurden = B25071_001E,
+         ICE_T = B19001_001E) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         ICE_A = ifelse(TotalHHs > 0, 
+                      (B19001A_014E+B19001A_015E+B19001A_016E+B19001A_017E), 0),
+         ICE_P = ifelse(TotalHHs > 0, 
+                      (B19001B_002E+B19001B_003E+B19001B_004E+B19001B_005E), 0),
+         ICE_tract = (ICE_A - ICE_P)/ICE_T,
+         year = "2017") %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
+```
+
+```{r calculate_ICE_for_TOD}
+TOD_area_2009 <- TOD_area %>%
+  filter(year=="2009") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+TOD_area_2017 <- TOD_area %>%
+  filter(year=="2017") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+         
+non_TOD_area_2009 <- non_TOD_area %>%
+  filter(year=="2009") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+non_TOD_area_2017 <- non_TOD_area %>%
+  filter(year=="2017") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+```
+
+```{r join_TOD_areas}
+allTracts.group <- 
+  rbind(TOD_area_2009,TOD_area_2017,non_TOD_area_2009,non_TOD_area_2017) %>%
+  mutate(MedRent.inf = ifelse(year == "2017", MedRent * 1.1426, MedRent))
 ```
 
 To summarize the new variables:
 - RentBurden: median gross rent as a percentage of household income
 - pctForeignBorn: percent of population born outside the US
 - pctVacant: percent of households that are vacant
+- ICE_TOD and ICE_tract: racial and economic index of concentration at the extremes
 
 The story I want to tell is one of equity in transit-oriented development. Of course, building residential and commercial developments with Metro access optimizes the value of public transit and improves overall mobility, sustainability and economic resilience. However, we should consider serving the people being left behind by private free market development and suggest ways to build affordable housing near key assets like commercial corridors and Metro stations.
 
@@ -599,6 +703,7 @@ We can investigate this problem from multiple angles.
 3. Vacancy: Neighborhood vacancy rate is influenced by many factors, one of which being housing demand. A lower vacancy rate can indicate more stress on housing supply and even suggest that an area may be undergoing a housing crisis.
 
 4. Racial and economic segregation: Although Metro access may be associated with increasing land and housing value, those with the greatest access to financial and social resources may also be securing large proportions of limited property around Metro stations and thereby limiting opportunities for less well-resourced communities. Tracking the index of concentration at the extremes over time captures the changing extent of racial and economic segregation in a given area, which is of great interest in an equitable development plan.
+
 
 ### Timothy's code & notes
 
