@@ -1,0 +1,4 @@
+"0",""
+"0","kable(allTracts.Summary) %>%"
+"0","  kable_styling() %>%"
+"0","  footnote(general_title = ""Indicators by TOD area and year"")"

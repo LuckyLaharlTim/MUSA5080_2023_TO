@@ -1,7 +1,0 @@
-"0","# Graduated Symbol Map"
-"0","labels_y <- symbol_pos %>%"
-"0","  left_join(pop_rent2009,"
-"0","            by = c(""ID"" = ""ID"")) %>%"
-"0","  arrange(desc(y)) "
-"2","Error: object 'pop_rent2009' not found
-"

@@ -1,0 +1,1436 @@
+---
+title: "HW Assignment 2"
+author: "MUSA 508 Super Group"
+date: "15 September 2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Setup
+
+```{r setup, include=FALSE, cache = TRUE,message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+```
+
+### Cleaning Workspace & Setup
+
+```{r clear_environment, cache=TRUE,include=F}
+
+rm(list=ls())
+```
+
+```{r setup_packages1, warning = FALSE, eval = FALSE,include=F}
+install.packages('tidyverse')
+install.packages('tidycensus')
+install.packages('sf')
+install.packages('kableExtra')
+```
+
+This analysis used R's `tidyverse`, `tidycensus`, `kableExtra`, and `sf`
+packages. In our setup, we load the libraries and set some options for a
+specific color ramp or preventing scientific notation.
+
+```{r code_setup}
+library(dplyr) #added this, not sure why it wasn't loaded in the lab?
+library(tidyverse)
+library(tidycensus)
+library(kableExtra)
+library(sf)
+
+# ignore scientific notation
+options(scipen=999)
+# ensure geometry is in sf format
+options(tigris_class="sf")
+# set colors for 5 color ramp in palette5
+palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
+stops_palette <- c("#0000FF","green","orange","red","gray","yellow")
+
+# set source url to grab functions from MUSA 5080 book
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+# Timothy's api key: "89824ea2e775e055d3b39974bbc07de16215f217"
+census_api_key(Sys.getenv("CENSUS_API_KEY"), overwrite = TRUE)
+```
+
+### Use `get_acs()` to get 2016 ACS data
+
+Notice this returns "long" data - let's examine it
+`r x<- load_variables(2017,"acs5")`
+
+```{r results='hide'}
+tracts16 <-  
+  get_acs(geography = "tract",
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E", "B25058_001E",
+                        "B06012_002E"),
+          year=2016, state="DC", geometry=TRUE) %>% 
+  st_transform('ESRI:102685')
+```
+
+#### Wide data vs long data (and `spread`vs `gather`)
+
+We create a new data frame consisting only of population
+
+```{r}
+
+totalPop16 <-
+  tracts16 %>%
+  filter(variable == "B25026_001")
+```
+
+Ways to examine the data
+
+```{r,include=F,eval=F}
+nrow(totalPop16)
+
+names(totalPop16)
+
+head(totalPop16)
+
+glimpse(totalPop16)
+```
+
+### Using ggplot to map census data with {sf}
+
+Each plot adds more and more nuance and information
+
+Examine each to see what we've added each time
+
+Consult the textbook to understand the symbology schemes.
+
+(Note: the `qBr()` function used here is an update to the one used
+version used in the text book so the results may appear different.)
+
+```{r}
+A <- 
+  ggplot() +
+  geom_sf(data = totalPop16, aes(fill = estimate)) +
+  theme(
+    plot.title = element_text(size=22)
+    )
+
+B <- 
+  ggplot() +
+  geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
+  theme(plot.title = element_text(size=22)) 
+
+C <-
+  ggplot() +
+  geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
+  scale_fill_manual(values = palette5,
+                    labels = qBr(totalPop16, "estimate"),
+                    name = "Total\nPopluation\n(Quintile Breaks)") +
+  theme(plot.title = element_text(size=22))
+
+D <- 
+  ggplot() +
+  geom_sf(data = totalPop16, aes(fill = q5(estimate))) +
+  scale_fill_manual(values = palette5,
+                    labels = qBr(totalPop16, "estimate"),
+                    name = "Popluation\n(Quintile Breaks)") +
+  labs(title = "Total Population", subtitle = "Washington D.C.; 2016") +
+  mapTheme() + 
+  theme(plot.title = element_text(size=22))
+```
+
+### Working with ACS Data
+
+Here we will modify the 2016 ACS by using `spread()` to widen the data
+so that each census variable is now a column. We will use `rename()` to
+give sensible names to the columns and we will use `mutate()` to make
+new features out of the existing columns. These are all steps we had
+introduced in Lab 1, except here we are doing it on {sf} spatial data
+frames.
+
+```{r}
+# Let's "spread" the data into wide form
+
+tracts16 <- 
+  tracts16 %>%
+  dplyr::select( -NAME, -moe) %>%
+  spread(key = variable, value = estimate) %>%
+  rename(TotalPop = B25026_001, 
+         Whites = B02001_002,
+         FemaleBachelors = B15001_050, 
+         MaleBachelors = B15001_009,
+         MedHHInc = B19013_001, 
+         MedRent = B25058_001,
+         TotalPoverty = B06012_002)
+
+
+# Let's create new rate variables using mutate
+
+tracts16 <- 
+  tracts16 %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop, 0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2016") %>%
+  dplyr::select(-Whites,-FemaleBachelors,-MaleBachelors,-TotalPoverty)
+```
+
+Tracts 2016 is now complete. Let's grab 2020 tracts and do the same
+thing.
+
+### 2020 Census Data
+
+Notice that we are getting "wide" data here in the first place This
+saves us the trouble of using "spread". We do this by using the
+`output="wide"` argument to `get_acs()`. IN previous code chunks we
+split the use of `get_acs()` to download the data from the use of
+`mutate()` and other {dplyr} functions. Here we put the entire process
+into one continuous sequence of code using the "pipe" operator `%>%`.
+
+```{r results='hide'}
+tracts20 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2020, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0), 
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2020") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+```
+
+## allTracts Creation
+
+```{r}
+
+allTracts <- rbind(tracts16,tracts20)
+```
+
+# Code and notes for HW2
+
+## Pulling census tracts and ACS data for 2009 and 2017 (?) and joining them
+
+```{r data_2009, results='hide'}
+tracts09 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2009, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2009") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+```
+
+```{r data_2017, results='hide'}
+tracts17 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E","B02001_002E",
+                        "B15001_050E","B15001_009E",
+                        "B19013_001E","B25058_001E",
+                        "B06012_002E"), 
+          year=2017, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+         MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2017") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty) 
+```
+
+```{r}
+allTracts <- rbind(tracts09,tracts17)
+```
+
+## UnConverted Code: 'Wrangling Transit Open Data' Forward
+
+## Tried writing something to pull DC metro stations based on code for SEPTA stops - Jamie
+
+### Added in Metro lines - Timothy
+
+```{r pull_metro_data, results='hide'}
+metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, LINE) %>%
+  st_transform('ESRI:102685') #change st_transform if needed
+
+#count lines per station
+metroStops$linecount <- sapply(strsplit(metroStops$LINE, ", "), function(x) length(x))
+
+metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, GIS_ID) %>%
+  st_transform('ESRI:102685') 
+```
+
+## View of Metro Stations & Lines
+
+```{r view_metro_data}
+ggplot() +
+  geom_sf(data=tracts09)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(size=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2"))+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+```
+
+## Generate TOD vs non-TOD
+
+```{r metro_buffer}
+buffer <- 
+  rbind(
+    st_union(st_buffer(metroStops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+ggplot() +
+  geom_sf(data=buffer) +
+  geom_sf(data=metroStops, show.legend = "point") +
+  facet_wrap(~Legend) + 
+  mapTheme()
+```
+
+```{r select_by_centroids}
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1426, MedRent)) 
+```
+
+```{r TOD_table}
+allTracts.Summary <- #also no idea if this works, just kind of plugged it in from the lab rmd
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(Rent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              Percent_White = mean(pctWhite, na.rm = T),
+              Percent_Bach = mean(pctBachelors, na.rm = T),
+              Percent_Poverty = mean(pctPoverty, na.rm = T))
+
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
+
+## Adjusted table - adjust for variables
+
+```{r TOD_table}
+allTracts.Summary <- #also no idea if this works, just kind of plugged it in from the lab rmd
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(Rent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              Percent_RentBurden = mean(pctPopRentBurden, na.rm = T),
+              Percent_Vacan = mean(pctVacant, na.rm = T),
+              Percent_Non_White = mean(pctNonWhite, na.rm = T),
+              Percent_ForeignBorn = mean(pctForeignBorn, na.rm = T),
+              Percent_Poverty = mean(pctPoverty, na.rm = T))
+allTracts.Summary %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable() %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
+
+### Testing out spatial selection
+
+```{r spatial_selection_test}
+qtr_buffer <- #generate quarter mile buffer for slightly more conservative selection
+  rbind(
+    st_union(st_buffer(metroStops, 1320)) %>%
+      st_sf())
+
+TOD_selection <- 
+  allTracts[qtr_buffer,] %>%
+  #dplyr::select(TotalPop) %>%
+  mutate(TOD = "TOD")
+
+non_TOD_selection <-
+  allTracts[qtr_buffer, op = st_disjoint] %>%
+  #dplyr::select(TotalPop) %>%
+  mutate(TOD = "Non-TOD")
+
+selection_allTracts <- rbind(TOD_selection, non_TOD_selection)
+
+ggplot() +
+  geom_sf(data=selection_allTracts,
+          aes(fill=TOD))+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(linewidth=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+```
+
+## Graduated symbol map
+
+```{r regenerate_stopbuffer}
+
+selection1 <- 
+  allTracts.group[buffer,] %>%
+  dplyr::select(TotalPop,MedRent,year) %>%
+  mutate(Selection_Type = "Spatial Selection")
+
+stopBuffer <- st_buffer(metroStops, 2640)
+stopBuffer$ID <- seq_along(stopBuffer$geometry)
+
+TOD_tracts <- selection1 %>% 
+  st_intersection(stopBuffer, selection1)
+
+pop_rent09 <- TOD_tracts %>%
+  st_drop_geometry() %>%
+  group_by(ID,year) %>%
+  summarize(x = mean(MedRent, na.rm = T), y = sum(TotalPop, na.rm = T))
+
+symbol_pos <- stopBuffer %>%
+  dplyr::select(ID) %>%
+  st_centroid()
+
+```
+
+```{r grad_symbol_maps}
+# Bubble choropleth maps
+
+labels_y <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(y)) 
+
+ggplot() + #try to split these into discrete var
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          aes(size = y,
+              fill = y),#ask ed discussion why this isnt combining
+          pch = 21,
+          col = "gray30") +
+  scale_size(
+    range = c(1, 4),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  scale_fill_gradient(low = "white", high = "blue3") +
+  labs(title = "Population near Washington Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  mapTheme2()+
+  theme(legend.position = "bottom")
+
+labels_x <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x)) 
+
+ggplot() +
+  geom_sf(data = allTracts.group, 
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_x,
+          pch = 21,
+          aes(size = x,
+              fill = x),
+          col = "gray30") +
+  scale_size(
+    range = c(1, 4),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  scale_fill_gradient(low = "yellow", high = "red3") +
+  labs(title = "Means of median rents in census tracts near Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  mapTheme2() +
+  theme(legend.position = "bottom")
+```
+
+```{r grad_symbol_maps_for_pop_rent_2009, warning=FALSE}
+# Graduated Symbol Map
+labels_y <- symbol_pos %>%
+  left_join(pop_rent2009,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(y)) 
+
+min <- min(labels_y$x,na.rm=TRUE)
+med <- median(labels_y$x,na.rm=TRUE)
+q1 <- summary(labels_y$x)[2]
+
+# for population
+ggplot() +
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = y),
+          fill = alpha("blue", 0.7),
+          col = "gray30") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Population near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+
+labels_y <- symbol_pos %>%
+  left_join(pop_rent2009,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x))
+
+# for rent (per month)
+ggplot() +
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = ifelse(removed_x,NA,x)),
+          # aes_string(ifelse(removed_x,"Undefined Stop",x)),
+          fill = alpha("red", 0.7),
+          col = "gray30") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = ifelse(!removed_x,NA,q1)),
+          fill = alpha("gray72", 0.7),
+          col = "gray30") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Means of median rents near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+
+```
+
+## Submarket analysis by number of lines
+
+```{r}
+threeLineStops <-
+  st_buffer(filter(metroStops, linecount >= 3), 2640) %>% st_union() %>%
+  st_sf() %>%
+  #st_difference(oneLineStops) %>%
+  mutate(Submarket = "Three or more lines")
+
+twoLineStops <-
+  st_buffer(filter(metroStops, linecount == 2), 2640) %>% st_union() %>%
+  st_sf() %>%
+  st_difference(threeLineStops) %>%
+  mutate(Submarket = "Two lines")
+
+oneLineStops <-
+  st_buffer(filter(metroStops, linecount == 1), 2640) %>% st_union() %>%
+  st_sf() %>%
+  st_difference(threeLineStops) %>%
+  mutate(Submarket = "One line")
+
+threeMarkets <- rbind(oneLineStops, twoLineStops, threeLineStops)
+```
+
+```{r}
+allTracts.threeMarkets <-
+  st_join(st_centroid(allTracts), threeMarkets) %>%
+  st_drop_geometry() %>%
+  left_join(allTracts) %>%
+  mutate(Submarket = replace_na(Submarket, "Non-TOD")) %>%
+  st_sf() 
+
+ggplot() +
+  geom_sf(data=allTracts.threeMarkets,
+          aes(fill=Submarket))+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(linewidth=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+
+# make small multiple plots next?
+```
+
+
+
+```{r}
+submarket_colors <- c("Non-TOD" = "black", "One line" = "#DFED6B", "Two lines" =  "#7bccc4", "Three or more lines" = "#0868ac")
+
+submarket_colors <- scales::alpha(submarket_colors, alpha = 0.7)
+
+allTracts.threeMarkets <-
+  st_join(st_centroid(allTracts), threeMarkets) %>%
+  st_drop_geometry() %>%
+  left_join(allTracts) %>%
+  mutate(Submarket = replace_na(Submarket, "Non-TOD")) %>%
+  st_sf() 
+
+ggplot() +
+  geom_sf(data = allTracts.threeMarkets, aes(fill = Submarket)) +
+  geom_sf(data = metroStops, aes(fill = "Metro Stops"), show.legend = "point", size = 2, color = "white") +
+  geom_sf(data = metroLines, aes(colour = NAME)) +
+  geom_line(linewidth = 10) +
+  scale_colour_manual(values = c("blue", "green", "orange", "red", "gray", "yellow2", NULL, NULL, NULL)) +
+  scale_fill_manual(values = submarket_colors) +
+  labs(color = "DC Metro Lines") +
+  labs(fill = "Submarket") +  # Specify the legend title for metroStops
+  mapTheme() +
+  theme(plot.caption = element_text(hjust = 0))
+
+
+```
+
+
+
+```{r}
+submarket_colors_graph <- c("Non-TOD" = "grey24", "One line" = "#0868ac", "Two lines" =  "#7bccc4", "Three or more lines" = "#DFED6B")
+
+st_drop_geometry(allTracts.threeMarkets) %>%
+  group_by(year, Submarket) %>%
+  summarize(Rent = mean(MedRent, na.rm = TRUE),
+            Population = mean(TotalPop, na.rm = TRUE),
+            Percent_RentBurden = mean(pctPopRentBurden, na.rm = TRUE),
+            Percent_Vacancy = mean(pctVacant, na.rm = TRUE),
+            Percent_Non_White = mean(pctNonWhite, na.rm = TRUE),
+            Percent_Poverty = mean(pctPoverty, na.rm = TRUE)) %>%
+  gather(Variable, Value, -year, -Submarket) %>%
+  ggplot(aes(year, Value, fill = Submarket)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol = 3) +
+  scale_fill_manual(values = submarket_colors_graph) +
+  labs(title = "Indicator differences across submarkets") +
+  plotTheme() +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 12, angle = 0),
+        panel.spacing = unit(0.5, "lines")) +  # Increase panel spacing
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+##Variable Map
+
+```{r}
+  ggplot(allTracts.group)+ #plugged in the chunk from lab, adjust for variables 
+    geom_sf(data = st_union(allTracts.group))+
+    geom_sf(aes(fill = q5(pctPopRentBurden))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red", linewidth = 0.7)+
+    scale_fill_manual(values = palette6,
+                      labels = qBr(allTracts.group, "pctNonWhite"),
+                      name = "Percent Rent Burden\n(Quantile Breaks)") +
+    labs(title = "Percent of the Population Burdened by Rent", subtitle = "2009-2017 DC Metro Area with 1/2 mile station buffers") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+    
+```
+
+## Multiple Ring Buffer-based analysis
+
+```{r mrb_test}
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
+                                maxDistance = 47520,
+                                interval =  2640)
+```
+
+```{r visualize_mrb_test}
+ggplot() + # delete this chunk in final markdown
+    geom_sf(data=DCmetro_MRB) +
+    geom_sf(data=metroStops, size=1) +
+    geom_sf(data=st_union(tracts09), fill=NA, size=1.2) +
+    labs(title="Half mile buffers") +
+    mapTheme()
+```
+
+```{r all_tracts_mrb}
+allTracts <- rbind(tracts09,tracts17)
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops), 9240, 1320)
+
+allTracts.rings <-
+  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
+          DCmetro_MRB) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+  
+allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+ggplot(allTracts.rings.summary, 
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)
+```
+
+# ACS variable exploration
+
+```{r load_variable_lists}
+acs_variable_list.2009 <- load_variables(2009, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+                                         
+acs_variable_list.2017 <- load_variables(2017, #year
+                                         "acs5", #five year ACS estimates
+                                         cache = TRUE)
+```
+
+### Jamie's notes
+
+Dropping a sample code chunk here that fetches/mutates my variables of
+interest, also calculates ICE scores for TOD areas by year.
+
+```{r data_2009, results='hide'}
+tracts09 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        "B05012_003E", #new ones begin here
+                        "B25002_003E",
+                        "B25002_001E", 
+                        "B25071_001E",
+                        "B19001_001E", #ICE-all households of all incomes
+                        "B19001A_014E","B19001A_015E","B19001A_016E","B19001A_017E", #ICE-white>100k
+                        "B19001B_002E","B19001B_003E","B19001B_004E","B19001B_005E"),#ICE-black<25k
+          year=2009, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         RentBurden = B25071_001E,
+         ICE_T = B19001_001E) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         ICE_A = ifelse(TotalHHs > 0, 
+                      (B19001A_014E+B19001A_015E+B19001A_016E+B19001A_017E), 0),
+         ICE_P = ifelse(TotalHHs > 0, 
+                      (B19001B_002E+B19001B_003E+B19001B_004E+B19001B_005E), 0),
+         ICE_tract = (ICE_A - ICE_P)/ICE_T,
+         year = "2009") %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
+```
+
+```{r data_2017, results='hide'}
+tracts17 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        "B05012_003E", #new ones begin here
+                        "B25002_003E",
+                        "B25002_001E", 
+                        "B25071_001E",
+                        "B19001_001E", #ICE-all households of all incomes
+                        "B19001A_014E","B19001A_015E","B19001A_016E","B19001A_017E", #ICE-white>100k
+                        "B19001B_002E","B19001B_003E","B19001B_004E","B19001B_005E"),#ICE-black<25k
+          year=2017, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         RentBurden = B25071_001E,
+         ICE_T = B19001_001E) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         ICE_A = ifelse(TotalHHs > 0, 
+                      (B19001A_014E+B19001A_015E+B19001A_016E+B19001A_017E), 0),
+         ICE_P = ifelse(TotalHHs > 0, 
+                      (B19001B_002E+B19001B_003E+B19001B_004E+B19001B_005E), 0),
+         ICE_tract = (ICE_A - ICE_P)/ICE_T,
+         year = "2017") %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
+```
+
+```{r calculate_ICE_for_TOD}
+TOD_area_2009 <- TOD_area %>%
+  filter(year=="2009") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+TOD_area_2017 <- TOD_area %>%
+  filter(year=="2017") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+         
+non_TOD_area_2009 <- non_TOD_area %>%
+  filter(year=="2009") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+non_TOD_area_2017 <- non_TOD_area %>%
+  filter(year=="2017") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+```
+
+```{r join_TOD_areas}
+allTracts.group <- 
+  rbind(TOD_area_2009,TOD_area_2017,non_TOD_area_2009,non_TOD_area_2017) %>%
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1426, MedRent))
+```
+
+To summarize the new variables: - RentBurden: median gross rent as a
+percentage of household income - pctForeignBorn: percent of population
+born outside the US - pctVacant: percent of households that are vacant -
+ICE_TOD and ICE_tract: racial and economic index of concentration at the
+extremes
+
+The story I want to tell is one of equity in transit-oriented
+development. Of course, building residential and commercial developments
+with Metro access optimizes the value of public transit and improves
+overall mobility, sustainability and economic resilience. However, we
+should consider serving the people being left behind by private free
+market development and suggest ways to build affordable housing near key
+assets like commercial corridors and Metro stations.
+
+We can investigate this problem from multiple angles.
+
+1.  Rent burden: As rent rises and income remains constant, the
+    percentage of income spent on rent must rise as well. This
+    percentage represents a key factor in whether residents must
+    relocate because of rising rents that become unaffordable. It is
+    most critical for lower income residents because they have less
+    disposable income and limited options for relocation.
+
+2.  Foreign born population: Those who were not born in the US
+    disproportionately grapple with limited English proficiency,
+    unemployment and poor access to needed cultural resources. Transit
+    access provides immigrants with opportunities to travel to language
+    and job training, as well as to communities with shared culture and
+    language.
+
+3.  Vacancy: Neighborhood vacancy rate is influenced by many factors,
+    one of which being housing demand. A lower vacancy rate can indicate
+    more stress on housing supply and even suggest that an area may be
+    undergoing a housing crisis.
+
+4.  Racial and economic segregation: Although Metro access may be
+    associated with increasing land and housing value, those with the
+    greatest access to financial and social resources may also be
+    securing large proportions of limited property around Metro stations
+    and thereby limiting opportunities for less well-resourced
+    communities. Tracking the index of concentration at the extremes
+    over time captures the changing extent of racial and economic
+    segregation in a given area, which is of great interest in an
+    equitable development plan.
+
+### Proportion of income spent on rent (and rent burden)
+
+When a household spends over 30% of its income on rent, it is defined as being rent burdened. Spending over 50% of income on rent is defined as severe rent burden. This indicator assesses housing affordability for a census tract's residents.
+
+```{r TOD_indicator_map_rentburden}
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=q5(RentBurden)),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=100)+
+  scale_fill_viridis(discrete=T,
+                     direction=-1,
+                     option="rocket",
+                     begin=0.2,
+                     end=0.8,
+                     labels=qBr(allTracts.group,"RentBurden"))+
+  scale_colour_manual(values=c("blue","green","orange","red","gray75","yellow2",
+                               NULL,NULL,NULL,NULL)) +
+  labs(color="Metro Lines",
+       title="Percent of income spent on rent, by census tract",
+       fill="% of income to rent",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers") +
+  facet_wrap(~year) +
+  mapTheme()
+```
+
+Overall, rent burden seemed to decrease across DC between 2009 and 2019. While housing became more affordable given residents' incomes, median household income may have increased across DC, meaning that housing prices did not necessarily decrease.
+
+### Housing vacancy
+
+Neighborhood vacancy rate is influenced by many factors, one of which being housing demand. A lower vacancy rate can indicate more stress on housing supply and even suggest that an area may be undergoing a housing crisis.
+
+```{r TOD_indicator_map_vacancy}
+br <- c(0, .1, .25, .5, 1)
+
+allTracts.group$pctVacantCat <- cut(allTracts.group$pctVacant,
+                                         breaks = br,
+                                         dig.lab = 5)
+
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=pctVacantCat),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.2,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=100)+
+  scale_fill_viridis(discrete=T,
+                     na.value="gray45",
+                     labels=c("0-10%","10-25%","25-50%","50-100%","N/A"))+
+  scale_color_manual(values=c("blue","green","orange","red","gray75","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="Metro Lines",
+       fill="Vacancy rate",
+       title="Vacancy rate by census tract",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers")+
+  facet_wrap(~year)+
+  mapTheme()
+```
+
+Although vacancy rate did not change greatly across the city, a few notable tracts within the TOD areas in Navy Yard, NoMa and Dupont Circle decreased their vacancy rates significantly between 2009 and 2019. This may reflect the great deal of transit-oriented development that occurred in these areas prior to 2009, then properties being purchased and/or rented as real estate demand grew between then and 2019.
+
+
+### Timothy's code & notes
+
+#### Getting ACS Data for 3 Years & Column Mutations
+
+```{r testing}
+tracts2009 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        # new ones begin here
+                        "B05012_003E", # ForeignBorn - Jamie
+                        "B25002_003E", # Vacant Household Count
+                        "B25002_001E", # Total Household Count
+                        "B25064_001E", # median gross rent in dollars
+                        "B25071_001E", # median gross rent percent of HHs
+                        
+                        "C08134_001", # means of transport to work by travel time - Total
+
+                        "C08134_031", # means of PUBLIC transport to work by travel time - Total
+                        # in five minute increments (through 032 from 0 to 10 minutes)
+                        "C08134_032", 
+                        "C08134_033",
+                        "C08134_034",
+                        "C08134_035",
+                        "C08134_036", # up to 29 minutes
+                        "C08134_037", # begin 30+ travel time (5 here)
+                        "C08134_038", # 10 minute range
+                        "C08134_039", # 15 minute range
+                        "C08134_040" # an hour+ travel time
+                        ), 
+          year=2009, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         MedGrossRent = B25064_001E,
+         RentPortionOfInc = B25071_001E,
+         WorkTransTotal = C08134_001E,
+         TotalTransitCommuters = C08134_031E,
+         PubTrans_HourUp = C08134_040E
+         ) %>%
+  dplyr::select(-NAME) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         PubTrans_LT30 = C08134_032E+C08134_033E+C08134_034E+C08134_035E+C08134_036E,
+         PubTrans_30To59 = C08134_037E+C08134_038E+C08134_039E,
+         TransitCommutePercentage = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0),
+         PubTrans_LT30Per = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
+         PubTrans_30To59Per = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
+         PubTrans_HourUpPer = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
+         year = "2009") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
+```
+
+```{r testing2017}
+tracts2017 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        # new ones begin here
+                        "B05012_003E", # ForeignBorn - Jamie
+                        "B25002_003E", # Vacant Household Count
+                        "B25002_001E", # Total Household Count
+                        "B25064_001E", # median gross rent in dollars
+                        "B25071_001E", # median gross rent percent of HHs
+                        # means of transport to work totals (non-Pub)
+                        "B08134_001", 
+                        
+                        "B08134_061", # means of PUBLIC transport to work by travel time - Total
+                        # in five minute increments (through 002 from 0 to 10 minutes)
+                        "B08134_062", 
+                        "B08134_063",
+                        "B08134_064",
+                        "B08134_065",
+                        "B08134_066", # up to 29 minutes
+                        "B08134_067", # begin 30+ travel time
+                        "B08134_068",
+                        "B08134_069",
+                        "B08134_070" # an hour+ travel time
+                        ), 
+          year=2017, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         MedGrossRent = B25064_001E,
+         RentPortionOfInc = B25071_001E,
+         WorkTransTotal = B08134_001E,
+         TotalTransitCommuters = B08134_061E,
+         PubTrans_HourUp = B08134_070E
+         ) %>%
+  dplyr::select(-NAME) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         PubTrans_LT30 = B08134_062E+B08134_063E+B08134_064E+B08134_065E+B08134_066E,
+         PubTrans_30To59 = B08134_067E+B08134_068E+B08134_069E,
+         TransitCommutePercentage = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0),
+         PubTrans_LT30Per = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
+         PubTrans_30To59Per = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
+         PubTrans_HourUpPer = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
+         year = "2017") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
+```
+
+```{r testing2020}
+tracts2020 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        # new ones begin here
+                        "B05012_003E", # ForeignBorn - Jamie
+                        "B25002_003E", # Vacant Household Count
+                        "B25002_001E", # Total Household Count
+                        "B25064_001E", # median gross rent in dollars
+                        "B25071_001E", # median gross rent percent of HHs
+                        # means of transport to work totals (non-Pub)
+                        "B08134_001", 
+                        
+                        "B08134_061", # means of PUBLIC transport to work by travel time - Total
+                        # in five minute increments (through 002 from 0 to 10 minutes)
+                        "B08134_062", 
+                        "B08134_063",
+                        "B08134_064",
+                        "B08134_065",
+                        "B08134_066", # up to 29 minutes
+                        "B08134_067", # begin 30+ travel time
+                        "B08134_068",
+                        "B08134_069",
+                        "B08134_070" # an hour+ travel time
+                        ), 
+          year=2020, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         MedGrossRent = B25064_001E,
+         RentPortionOfInc = B25071_001E,
+         WorkTransTotal = B08134_001E,
+         TotalTransitCommuters = B08134_061E,
+         PubTrans_HourUp = B08134_070E
+         ) %>%
+  dplyr::select(-NAME) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         PubTrans_LT30 = B08134_062E+B08134_063E+B08134_064E+B08134_065E+B08134_066E,
+         PubTrans_30To59 = B08134_067E+B08134_068E+B08134_069E,
+         TransitCommutePercentage = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal,0),
+         PubTrans_LT30Per = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters,0),
+         PubTrans_30To59Per = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters,0),
+         PubTrans_HourUpPer = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters,0),
+         year = "2020") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
+```
+
+`r tracts09_17 <- rbind(tracts2009,tracts2017)`
+`r tracts17_20 <- rbind(tracts2017,tracts2020)`
+`r tracts09_20 <- rbind(tracts2009,tracts2020)`
+`r allTracts <- rbind(tracts2009,tracts2017,tracts2020)`
+
+#### Retrieve Metro Data
+
+```{r pull_metro_data, results='hide'}
+metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, LINE) %>%
+  ## works in console line by line, but not here?
+    # mutate(red = ifelse("red" %in% str_split(LINE,",",simplify=T)[1,1:5],1,0),
+    #        silver=ifelse("silver" %in% str_split(LINE,",",simplify=T)[1,1:5],1,0),
+    #        blue=ifelse("blue" %in% str_split(LINE,",",simplify=T)[1,1:5],1,0),
+    #        orange=ifelse("orange" %in% str_split(LINE,",",simplify=T)[1,1:5],1,0),
+    #        green=ifelse("green" %in% str_split(LINE,",",simplify=T)[1,1:5],1,0),
+    #        yellow= ifelse("yellow" %in% str_split(LINE,",",simplify=T)[1,1:5],1,0)
+  #) %>%
+  st_transform(st_crs(allTracts)) #change st_transform if needed
+
+metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, GIS_ID) %>%
+  st_transform(st_crs(allTracts))
+```
+
+#### View of Metro Stations & Lines
+
+```{r view_metro_data}
+ggplot() +
+  geom_sf(data=allTracts,fill = "#75AEFB", color = "#343434")+ # skyblue = "#87CEEB"
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=2,
+          color = "black")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(size=10)+ #JS - I don't think this size adjustment is working
+  scale_colour_manual(values=c("#0000FF","green","orange","red","gray","yellow"))+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+```
+
+#### Generate TOD vs non-TOD
+
+```{r metro_buffer}
+metroBuffers <- 
+  rbind(
+    st_buffer(metroStops, 2640) %>% # half-mile
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(metroStops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+buffer <- filter(metroBuffers, Legend=="Unioned Buffer")
+
+ggplot() +
+  geom_sf(data=metroBuffers) +
+  geom_sf(data=metroStops, show.legend = "point") +
+  facet_wrap(~Legend) + 
+  mapTheme()
+```
+
+```{r select_by_centroids}
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1426, MedRent)) 
+```
+
+```{r summaryTable_and_kable}
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(CRent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              # Percent_PublicTransit = mean(TransitCommutePercentage, na.rm = T), # not sure why this column is never added to table
+              LowTT = mean(pctPubTrans_LT30*100, na.rm = T),
+              MedTT = mean(pctPubTrans_30To59*100, na.rm = T),
+              HourPlusTT = mean(pctPubTrans_HourUp*100, na.rm = T),
+              HH_Count = mean(TotalHHs,na.rm=T),
+              GRent = mean(MedGrossRent,na.rm=T),
+              RentPorIncome = mean(RentPortionOfInc,na.rm=T),
+              Poverty = mean(pctPoverty,na.rm=T),
+              Foreign = mean(pctForeignBorn,na.rm=T),
+              Vacancies = mean(pctVacant,na.rm=T))
+
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
+
+#### Making Indicator Variable Visualizations (TOD & Non-TOD)
+
+```{r tryingVisualizations}
+
+listLabs <- c("Percent of Short-Trip Public Transportation Commuters","Percent of Medium-Trip Public Transportation Commuters","Percent of Long-Trip Public Transportation Commuters")
+# quintiles <- c(allTracts.group%>%filter(variable == "pctPubTrans_LT30"),allTracts.group%>%filter(variable == "pctPubTrans_30To59"),allTracts.group%>%filter(variable == "pctPubTrans_HourUp"))
+# for low travel times
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "orange", aes(fill = q5(pctPubTrans_LT30)))+
+  # geom_sf(data=DCmetro_MRB,fill="transparent",color="purple") + # crystal green #A4D579; black used for color before: #343434
+  geom_sf(data=metroStops, show.legend = "point") +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,pctPubTrans_LT30*100, listLabs[1]))+
+  mapTheme()
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "orange", aes(fill = q5(pctPubTrans_30To59)))+
+  # geom_sf(data=DCmetro_MRB,fill="transparent",color="purple") + # crystal green #A4D579; black used for color before: #343434
+  geom_sf(data=metroStops, show.legend = "point") +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,pctPubTrans_30To59*100, listLabs[2]))+
+  mapTheme()
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "orange", aes(fill = q5(pctPubTrans_HourUp)))+
+  # geom_sf(data=DCmetro_MRB,fill="transparent",color="purple") + # crystal green #A4D579; black used for color before: #343434
+  geom_sf(data=metroStops, show.legend = "point") +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,pctPubTrans_HourUp*100, listLabs[3]))+
+  mapTheme()
+
+
+```
+
+##### grouped bar plot of same
+
+Some Definitions of housing Variable Concepts
+[here](https://www.census.gov/housing/hvs/definitions.pdf)
+
+```{r barPlots}
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(CRent = mean(MedRent, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              # Percent_PublicTransit = mean(TransitCommutePercentage, na.rm = T), # not sure why this column is never added to table
+              LowTT = mean(pctPubTrans_LT30*100, na.rm = T),
+              MedTT = mean(pctPubTrans_30To59*100, na.rm = T),
+              HourPlusTT = mean(pctPubTrans_HourUp*100, na.rm = T),
+              HH_Count = mean(TotalHHs,na.rm=T),
+              GRent = mean(MedGrossRent,na.rm=T),
+              RentPorIncome = mean(RentPortionOfInc,na.rm=T),
+              Poverty = mean(pctPoverty,na.rm=T),
+              Foreign = mean(pctForeignBorn,na.rm=T),
+              Vacancies = mean(pctVacant,na.rm=T))
+
+# bar plots
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=6) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "Indicator differences across time and space") +
+  plotTheme() + theme(legend.position="bottom")
+```
+
+##### table of same
+
+```{r tables}
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.2")
+```
+
+#### geom_line plot (last part of code & notes)
+
+##### Starting Multiple Ring Buffer
+
+```{r mrb_test}
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
+                                maxDistance = 2640*5, # or 2640
+                                interval =  2640)
+```
+
+```{r visualize_mrb_test}
+ggplot() +
+    geom_sf(data=DCmetro_MRB) +
+    geom_sf(data=metroStops, size=1) +
+    geom_sf(data=st_union(allTracts), fill=NA, size=1.2) +
+    labs(title="Half mile buffers") +
+    mapTheme()
+```
+
+##### displaying buffer data table (line plot)
+
+```{r mrb_test_table}
+# adding allTracts.rings
+allTracts.rings <- 
+  allTracts %>% 
+  select(GEOID, year) %>% 
+  st_centroid() %>% 
+  st_join(DCmetro_MRB, join = st_intersects) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+ggplot(allTracts.rings.summary,
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)
+```
+
+Years 2017 & 2020 had the same references for variables, so the jump
+from 2009 -\> the 2017/2020 is where you might want to be careful.
+
+Added in ...
+
+1.  Total Number of Reported Public Transportation (not taxicab)
+    commuters to Work - 'Renamed Var Name'
+2.  Total Number of Public Transit Users with Travel Time \< 30
+    minutes - 'Renamed Var Name'
+3.  Total Number of Public Transit Users with Travel Time 30\<=x\<60
+    minutes - 'Renamed Var Name'
+4.  Total Number of Public Transit Users with Travel Time \>60 minutes -
+    'Renamed Var Name'
+
+(Also renamed RentBurden in my version to 'RentPortionOfInc' due to
+retrieving it again before realizing it was RentBurden)
+
+There's a small desire to see if work commute time is a factor in higher
+median rent for specific tracts/block groups & if the trend changes
+across years. - Note to self, changes to variables end by noon
+Wednesday, 9/21
+
+### xxx's notes
+
+```{r Name_Vars, results='hide'}
+```
+
+```{r sessionInfo, include = F}
+# this makes a text file with the libraries and info about your system (so that you can tell what you needed to run this in the future)
+write(capture.output(sessionInfo()),file="requirements.txt")
+```
