@@ -344,7 +344,7 @@ allTracts.group <-
       left_join(allTracts) %>%
       st_sf() %>%
       mutate(TOD = "Non-TOD")) %>%
-  mutate(MedRent.inf = ifelse(year == "2017", MedRent * 1.1426, MedRent)) 
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1426, MedRent)) 
 ```
 
 ```{r TOD_table}
@@ -868,7 +868,7 @@ non_TOD_area_2017 <- non_TOD_area %>%
 ```{r join_TOD_areas}
 allTracts.group <- 
   rbind(TOD_area_2009,TOD_area_2017,non_TOD_area_2009,non_TOD_area_2017) %>%
-  mutate(MedRent.inf = ifelse(year == "2017", MedRent * 1.1426, MedRent))
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1426, MedRent))
 ```
 
 To summarize the new variables: - RentBurden: median gross rent as a
@@ -1256,7 +1256,7 @@ allTracts.group <-
       left_join(allTracts) %>%
       st_sf() %>%
       mutate(TOD = "Non-TOD")) %>%
-  mutate(MedRent.inf = ifelse(year == "2017", MedRent * 1.1426, MedRent)) 
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1426, MedRent)) 
 ```
 
 ```{r summaryTable_and_kable}
