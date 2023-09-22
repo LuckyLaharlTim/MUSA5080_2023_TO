@@ -1,0 +1,639 @@
+---
+title: "Equitable Transit-Oriented Development in Washington, D.C."
+subtitle: "A policy brief for the Council of the District of Columbia"
+author: "Jamie Song, for MUSA 5080"
+date: "22 September 2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, cache = TRUE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+
+# Load Libraries
+
+library(dplyr)
+library(tidyverse)
+library(tidycensus)
+library(kableExtra)
+library(sf)
+library(viridis)
+library(shades)
+
+# ignore scientific notation
+options(scipen=999)
+# ensure geometry is in sf format
+options(tigris_class="sf")
+# set colors for 5 color ramp in palette5
+palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac")
+
+# set source url to grab functions from MUSA 5080 book
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+# customize new map theme based on Anna's mapTheme
+mapTheme2 <- function(base_size = 15) {
+  theme(
+    text = element_text(color = "black"),#, family="Helvetica"),
+    plot.title = element_text(size = 12,colour = "black", hjust=0, face="bold"),
+    plot.subtitle=element_text(face="italic", hjust = 0),
+    plot.caption=element_text(face="italic", size = 7, hjust = 0),
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "white", fill=NA, size=2),
+    panel.background = element_rect(fill = "grey90", size = 0, colour = NA),
+    legend.background = element_blank(),
+    legend.position="right"
+  )
+}
+
+# load census api key
+census_api_key(Sys.getenv("811e1f6f8d1f299cb75a0f0c07e01aafd801fa79"), overwrite = TRUE)
+```
+
+# Introduction
+
+In an age of unprecedented government funding for rail transportation and a rapidly changing urban landscape in Washington, DC, including recent Metro extensions to Dulles Int'l Airport and Loudoun County, VA, transit-oriented development is taking center stage in the National Capital Region. 
+
+This policy brief seeks to motivate equitable approaches to transit-oriented development by exploring four economic and social indicators: 1. median household income, helping to paint an overall picture of economic and social class across DC; 2. percent of income spent on rent, which is used to assess rent burden; 3. residential vacancy rate, which is tied to residential demand; and 4. the racial and economic index of concentration at the extremes, a measure of privilege, deprivation and segregation. 
+
+# Data and Methods
+
+## Data Sources
+
+The data sources for this brief are:
+
+1. American Community Survey 5-year estimates for 2009 and 2019
+```{r data_09_19, results='hide'}
+library(dplyr)
+
+tracts09 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        "B05012_003E", #new ones begin here
+                        "B25002_003E",
+                        "B25002_001E", 
+                        "B25071_001E",
+                        "B19001_001E", #ICE-all households of all incomes
+                        "B19001A_014E","B19001A_015E","B19001A_016E","B19001A_017E", #ICE-white>100k
+                        "B19001B_002E","B19001B_003E","B19001B_004E","B19001B_005E"),#ICE-black<25k
+          year=2009, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         #ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         RentBurden = B25071_001E,
+         ICE_T = B19001_001E) %>%
+  mutate(#pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         #pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         #pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         #avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         ICE_A = ifelse(TotalHHs > 0, 
+                      (B19001A_014E+B19001A_015E+B19001A_016E+B19001A_017E), 0),
+         ICE_P = ifelse(TotalHHs > 0, 
+                      (B19001B_002E+B19001B_003E+B19001B_004E+B19001B_005E), 0),
+         ICE_tract = (ICE_A - ICE_P)/ICE_T,
+         year = "2009") %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
+
+tracts19 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        "B05012_003E", #new ones begin here
+                        "B25002_003E",
+                        "B25002_001E", 
+                        "B25071_001E",
+                        "B19001_001E", #ICE-all households of all incomes
+                        "B19001A_014E","B19001A_015E","B19001A_016E","B19001A_017E", #ICE-white>100k
+                        "B19001B_002E","B19001B_003E","B19001B_004E","B19001B_005E"),#ICE-black<25k
+          year=2019, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         #ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         RentBurden = B25071_001E,
+         ICE_T = B19001_001E) %>%
+  mutate(#pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         #pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         #pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         #avgHHsize = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         ICE_A = ifelse(TotalHHs > 0, 
+                      (B19001A_014E+B19001A_015E+B19001A_016E+B19001A_017E), 0),
+         ICE_P = ifelse(TotalHHs > 0, 
+                      (B19001B_002E+B19001B_003E+B19001B_004E+B19001B_005E), 0),
+         ICE_tract = (ICE_A - ICE_P)/ICE_T,
+         year = "2019") %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs)
+
+allTracts <- rbind(tracts09,tracts19)
+```
+2. DC Open Data - Metro lines and stations
+```{r pull_metro_data, results='hide'}
+metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, LINE) %>%
+  st_transform('ESRI:102685')
+
+# Count number of metro lines per stop
+metroStops$linecount <- sapply(strsplit(metroStops$LINE, ", "), function(x) length(x))
+
+metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, GIS_ID, geometry) %>%
+  st_transform('ESRI:102685') 
+```
+
+## View of Metro Stations & Lines
+
+The Washington Metro is the second-busiest heavy rail rapid transit system in the US, and with its core in the District of Columbia, it also serves critical political, social, and economic mobility needs for the entire Capital region.
+
+```{r view_metro_data}
+ggplot() + #delete chunk in final markdown
+  geom_sf(data=allTracts,
+          fill="lightblue",
+          color="gray50")+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.5,
+          color = "black")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(linewidth=100)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray30","yellow2"))+
+  labs(color="Metro Lines",
+       title="Washington DC Metrorail")+
+  mapTheme()
+```
+
+### Defining transit-oriented development (TOD) census tracts
+
+In this brief, we define a TOD census tract as one whose centroid, or geographical center of the tract, is within a half mile of a Metro station. Tracts that do not fit this definition are labeled as non-TOD tracts. Although this more conservative selection method excludes many areas that are near Metro stations, it helps to ensure that the majority of each TOD tract is truly within a half mile of a Metro station. 
+
+TOD areas are also visually estimated using half-mile buffers around Metro stations.
+
+```{r metro_buffer_TOD_select}
+buffer <- 
+  rbind(
+    st_union(st_buffer(metroStops, 2640)) %>%
+      st_sf())
+
+qtr_buffer <- 
+  rbind(
+    st_union(st_buffer(metroStops, 1320)) %>%
+      st_sf())
+
+TOD_area <- # select by centroids
+  st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD")
+
+non_TOD_area <-
+  st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")
+
+```
+
+```{r calcICE_joinAreas_vizTOD}
+TOD_area_2009 <- TOD_area %>%
+  filter(year=="2009") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+TOD_area_2019 <- TOD_area %>%
+  filter(year=="2019") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+         
+non_TOD_area_2009 <- non_TOD_area %>%
+  filter(year=="2009") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+non_TOD_area_2019 <- non_TOD_area %>%
+  filter(year=="2019") %>%
+  mutate(ICE_TOD = (sum(ICE_A) - sum(ICE_P))/sum(ICE_T))
+
+allTracts.group <- 
+  rbind(TOD_area_2009,TOD_area_2019,non_TOD_area_2009,non_TOD_area_2019) %>%
+  mutate(MedRent.inf = ifelse(year == "2019", MedRent * 1.1426, MedRent))
+
+ggplot() +
+  geom_sf(data=allTracts.group,
+          color="gray30",
+          aes(fill=TOD)) +
+  geom_sf(data=metroStops,
+          show.legend = "point", size=1.5,
+          color = "black") +
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(linewidth=100)+
+  scale_fill_manual(values=c("pink2","cyan3"))+
+  scale_colour_manual(values=c("blue","green","orange","red","gray30","yellow2"))+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  labs(color="Metro Lines",
+       fill="TOD Areas",
+       title="Transit-oriented development areas along the Metro",
+       subtitle="With half mile buffers")+
+  mapTheme2()
+```
+### Examining TOD tracts by number of lines accessible to each
+
+The number of lines a rider is able to access also influences the value of Metro access. The following map summarizes the number of lines accessible to each TOD tract as defined by a half-mile radius.
+
+```{r determine_viz_linecount}
+threeLineStops <-
+  st_buffer(filter(metroStops, linecount >= 3), 2640) %>% st_union() %>%
+  st_sf() %>%
+  #st_difference(oneLineStops) %>%
+  mutate(Lines = "Three or more")
+
+oneLineStops <-
+  st_buffer(filter(metroStops, linecount == 1), 2640) %>% st_union() %>%
+  st_sf() %>%
+  st_difference(threeLineStops) %>%
+  mutate(Lines = "One")
+
+twoLineStops <-
+  st_buffer(filter(metroStops, linecount == 2), 2640) %>% st_union() %>%
+  st_sf() %>%
+  st_difference(threeLineStops) %>%
+  mutate(Lines = "Two")
+
+threeMarkets <- rbind(oneLineStops, twoLineStops, threeLineStops)
+
+allTracts.threeMarkets <-
+  st_join(st_centroid(allTracts), threeMarkets) %>%
+  st_drop_geometry() %>%
+  left_join(allTracts) %>%
+  mutate(Lines = replace_na(Lines, "Non-TOD")) %>%
+  st_sf() 
+
+ggplot() +
+  geom_sf(data=allTracts.threeMarkets,
+          aes(fill=Lines))+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.5,
+          color = "black")+ 
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(linewidth=10)+
+  scale_fill_manual(values=c("gray80","green4","cyan3","purple3"))+
+  scale_colour_manual(values=c("blue","green","orange","red","gray","yellow2",NULL,NULL,NULL,NULL))+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  labs(color="Metro Lines",
+       title="Number of lines accessible to TOD tracts in DC",
+       subtitle="With half mile buffers")+
+  mapTheme2()
+```
+
+# Results
+
+## Visualizing indicators across time and space
+
+The following maps show how our four key indicators vary between 2009 and 2019 as well as over all DC census tracts.
+(Note: When tracts display in gray, data is missing for those tracts.)
+
+
+### Median household income
+
+The median household income of a census tract serves as an indicator for its median level of affluence. Therefore, changes in median household income over time can suggest directions and magnitude of broad economic trends; here, we are mainly interested in establishing whether residents of census tracts became more or less wealthy from 2009 to 2019.
+
+```{r TOD_indicator_map_medHHinc}
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=q5(MedHHInc)),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.5,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=1)+
+  scale_fill_viridis(discrete=T,
+                     option="cividis",
+                     labels=qBr(allTracts.group,"MedHHInc")) +
+  scale_color_manual(values=c("blue","green","orange","red","gray75","yellow2",
+                               NULL,NULL,NULL,NULL))+
+  labs(color="Metro Lines",
+       title="Median household income by census tract (adjusted for inflation)",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers",
+       fill="Household income (in $)")+
+  facet_wrap(~year)+
+  mapTheme2()
+```
+
+A visual examination of these maps suggests that TOD areas, as well as DC at large, experienced rising median household incomes. In particular, areas along the Red line in Northwest DC and along the Yellow/Green lines in Columbia Heights demonstrated notably great increases.
+
+
+### Proportion of income spent on rent (and rent burden)
+
+When a household spends over 30% of its income on rent, it is defined as being rent burdened. Spending over 50% of income on rent is defined as severe rent burden. This indicator assesses housing affordability for a census tract's residents.
+
+```{r TOD_indicator_map_rentburden}
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=q5(RentBurden)),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.5,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=100)+
+  scale_fill_viridis(discrete=T,
+                     direction=-1,
+                     option="rocket",
+                     begin=0.2,
+                     end=0.8,
+                     labels=qBr(allTracts.group,"RentBurden"))+
+  scale_colour_manual(values=c("blue","green","orange","red","gray75","yellow2",
+                               NULL,NULL,NULL,NULL)) +
+  labs(color="Metro Lines",
+       title="Percent of income spent on rent, by census tract",
+       fill="% of income to rent",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers") +
+  facet_wrap(~year) +
+  mapTheme()
+```
+
+Overall, rent burden seemed to decrease across DC between 2009 and 2019. While housing became more affordable given residents' incomes, median household income may have increased across DC, meaning that housing prices did not necessarily decrease.
+
+
+### Housing vacancy
+
+Neighborhood vacancy rate is influenced by many factors, one of which being housing demand. A lower vacancy rate can indicate more stress on housing supply and even suggest that an area may be undergoing a housing crisis.
+
+```{r TOD_indicator_map_vacancy}
+br <- c(0, .1, .25, .5, 1)
+
+allTracts.group$pctVacantCat <- cut(allTracts.group$pctVacant,
+                                         breaks = br,
+                                         dig.lab = 5)
+
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=pctVacantCat),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.5,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=100)+
+  scale_fill_viridis(discrete=T,
+                     na.value="gray45",
+                     labels=c("0-10%","10-25%","25-50%","50-100%","N/A"))+
+  scale_color_manual(values=c("blue","green","orange","red","gray75","yellow2",NULL,NULL,NULL,NULL))+
+  labs(color="Metro Lines",
+       fill="Vacancy rate",
+       title="Vacancy rate by census tract",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers")+
+  facet_wrap(~year)+
+  mapTheme()
+```
+
+Although vacancy rate did not change greatly across the city, a few notable tracts within the TOD areas in Navy Yard, NoMa and Dupont Circle decreased their vacancy rates significantly between 2009 and 2019. This may reflect the great deal of transit-oriented development that occurred in these areas prior to 2009, then properties being purchased and/or rented as real estate demand grew between then and 2019.
+
+
+### Index of concentration at the extremes (ICE)
+
+The racial and economic index of concentration at the extremes was developed by Massey (2001) and elaborated on by Krieger and colleagues (2016) to capture "extremes of privilege and deprivation," and it is able to measure both economic and racial segregation. ICE can take any value between -1 and 1; a value of 1 indicates that all residents are in the "privileged" group, and a value of −1 indicates that all residents are in the most "deprived" group. For this brief, Krieger and colleagues' definitions will be used: White households with incomes over 100,000 USD are the privileged group, and Black households with incomes below 25,000 USD are the deprived group.
+
+```{r TOD_indicator_map_ICE}
+ggplot() +
+  geom_sf(data=allTracts.group,
+          aes(fill=ICE_tract),
+          color=NA)+
+  geom_sf(data=metroStops, 
+          show.legend = "point", size=1.5,
+          color = "black")+
+  geom_sf(data=buffer,
+          color="white",
+          fill="transparent")+
+  geom_sf(data=metroLines, 
+          aes(color=NAME))+
+  geom_line(size=10)+
+  scale_colour_manual(values=c("blue","green","orange","red","gray75","yellow2",NULL,NULL,NULL,NULL))+
+  brightness(scale_fill_viridis(option="turbo"),scalefac(0.88))+
+  labs(color="Metro Lines",
+       fill="ICE",
+       title="Index of concentration at the extremes by census tract",
+       subtitle="Washington, DC, 2009-2019, with half-mile Metro station buffers",
+       caption="Gray tracts have no data")+
+  facet_wrap(~year)+
+  mapTheme2()
+```
+
+In general, Northwest and Central DC tend to have positive ICE values, whereas eastern regions tend to have negative values. This spatial distinction in ICE values demonstrates a great deal of racial and economic segregation between these two "sides" of DC. Furthermore, ICE values seemed to increase across DC between 2009 and 2019, suggesting that DC has become whiter and wealthier over time. One notable exception to this trend is in Southeast DC, which remained approximately as deprived as it was in 2009.
+
+## TOD vs. non-TOD tracts by indicators
+
+The following plots compare TOD and non-TOD tracts on our four indicators.
+
+```{r TOD_indicator_bargraphs}
+allTracts.Summary <-
+  st_drop_geometry(allTracts.group) %>%
+    group_by(TOD, year) %>%
+    summarize(ICE = mean(ICE_TOD, na.rm = T),
+              Percent_Income_on_Rent = mean(RentBurden, na.rm = T), 
+              Median_HH_Income = mean(MedHHInc, na.rm = T),
+              Vacancy_Rate = mean(pctVacant, na.rm = T),
+              )
+
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free", ncol=2) +
+  scale_fill_manual(values = c("pink2", "cyan3")) +
+  labs(title = "Indicator differences across time and space") +
+  plotTheme() + theme(legend.position="bottom")
+
+kable(allTracts.Summary) %>%
+  kable_styling() %>%
+  footnote(general_title = "Indicators by TOD area and year")
+```
+
+Based on these data, median household income increased and ICE trended towards 1 across all of DC; therefore, as reflected in the previous map, DC became wealthier and whiter - more privileged. TOD areas experienced a greater increase in median household income and a greater trend towards 1 than non-TOD areas, signaling an equity issue in transit-oriented development: those who are more racially and economically deprived are potentially being pushed out of areas near Metro stations, and out of DC at large. 
+
+## Population and rent around Metro stations over time
+
+The following maps show changes in population and rent in tracts within a half mile radius of Metro stations.
+
+```{r make_grad_symbol_maps, warning=FALSE, message=FALSE}
+
+selection1 <- 
+  allTracts.group[buffer,] %>%
+  dplyr::select(TotalPop,MedRent,year) %>%
+  mutate(Selection_Type = "Spatial Selection")
+
+stopBuffer <- st_buffer(metroStops, 2640)
+stopBuffer$ID <- seq_along(stopBuffer$geometry)
+
+TOD_tracts <- selection1 %>% 
+  st_intersection(stopBuffer, selection1)
+
+pop_rent09 <- TOD_tracts %>%
+  st_drop_geometry() %>%
+  group_by(ID,year) %>%
+  summarize(x = mean(MedRent, na.rm = T), y = sum(TotalPop, na.rm = T))
+
+symbol_pos <- stopBuffer %>%
+  dplyr::select(ID) %>%
+  st_centroid()
+
+# Bubble choropleth maps
+
+labels_y <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(y)) 
+
+ggplot() + #try to split these into discrete var
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          aes(size = y,
+              fill = y),#ask ed discussion why this isnt combining
+          pch = 21,
+          col = "gray30") +
+  scale_size(
+    range = c(1, 4),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  scale_fill_gradient(low = "white", high = "blue3") +
+  labs(title = "Population near Washington Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  mapTheme2()+
+  theme(legend.position = "bottom")
+
+labels_x <- symbol_pos %>%
+  left_join(pop_rent09,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x)) 
+
+ggplot() +
+  geom_sf(data = allTracts.group, 
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_x,
+          pch = 21,
+          aes(size = x,
+              fill = x),
+          col = "gray30") +
+  scale_size(
+    range = c(1, 4),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  scale_fill_gradient(low = "yellow", high = "red3") +
+  labs(title = "Means of median rents in census tracts near Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  mapTheme2() +
+  theme(legend.position = "bottom")
+```
+
+These maps show that, while population appreciably increased between 2009 and 2019, there was a very significant increase in median rent in the same time period. Therefore, despite rising rents, people are still moving into TOD areas in DC. As previous visualizations showed, these people are likely wealthier than existing or previous residents 
+
+## The relationship between rent and distance from Metro stations
+
+```{r mrb_graph, warning=FALSE, message=FALSE}
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
+                                maxDistance = 1320*7,
+                                interval =  1320)
+
+allTracts <- rbind(tracts09,tracts19)
+
+allTracts.rings <-
+  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)),
+          DCmetro_MRB) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+  
+allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent, na.rm=T))
+
+ggplot(allTracts.rings.summary, 
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+      geom_line(size=2) +
+      labs(
+        title="Mean rent by distance from Metro station",
+        subtitle="Census tracts in Washington, DC",
+        x="Distance (in miles)",
+        y="Mean rent")
+```
+
+Although rents generally increased between 2009 and 2019, the relationship between rent and distance from Metro stations remained similar. Under one mile away from stations, rent tended to decrease as distance increased; this relationship demonstrates that people are willing to pay more to live closer to Metro stations, which themselves serve as nodes of economic and social activity. Farther away from stations, the relationship reversed before returning to the decreasing trend. This variability may suggest that housing size increases beyond the 1 mile boundary, resulting in higher rents but not necessarily higher rent per square foot. It may also suggest that DC residents who live farther than one mile away from a Metro station tend to own private vehicles, which reduces the effect of Metro station proximity on housing demand.
+
+# Discussion and Policy Recommendations
+
+As the potential of transit-oriented development becomes increasingly realized in the Washington DC area, it is critical for DC residents to 
+
+
+## References
+
+Massey, D. S. (2001). The prodigal paradigm returns: ecology comes back to sociology. Does It Take a Village? Community Effects on Children, Adolescents, and Families, 41–48.
+
+Krieger, N., Waterman, P. D., Spasojevic, J., Li, W., Maduro, G., & Van Wye, G. (2016). Public Health Monitoring of Privilege and Deprivation With the Index of Concentration at the Extremes. American journal of public health, 106(2), 256–263. https://doi.org/10.2105/AJPH.2015.302955
+
+
