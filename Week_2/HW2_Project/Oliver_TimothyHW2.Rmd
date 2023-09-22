@@ -1,0 +1,616 @@
+---
+title: "Using Ridership and Travel Time \nto Measure Resident Value in TOD"
+author: "Timothy Oliver"
+date: "22 September 2023"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE, cache = TRUE,message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+rm(list=ls())
+```
+
+```{r setup_packages1, warning = FALSE, eval = FALSE,include=F}
+install.packages('tidyverse')
+install.packages('tidycensus')
+install.packages('sf')
+install.packages('kableExtra')
+```
+
+```{r code_setup, include=FALSE}
+
+rm(list=ls())
+
+library(tidyverse)
+library(tidycensus)
+library(kableExtra)
+library(sf)
+
+# ignore scientific notation
+options(scipen=999)
+# ensure geometry is in sf format
+options(tigris_class="sf")
+# set colors for 5 color ramp in palette5
+palette5 <- c("#ffe267","#eaa92e","#ba480a","#5c0e0e","#3e0606")
+stops_palette <- c("#0000FF","green","orange","red","gray","yellow")
+
+
+# set source url to grab functions from MUSA 5080 book
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+# Timothy's api key: "89824ea2e775e055d3b39974bbc07de16215f217"
+census_api_key(Sys.getenv("CENSUS_API_KEY"), overwrite = TRUE)
+```
+
+# Executive Summary
+
+  Since it's 1969 inception, the Washington D.C. Metro has grown to better serve the Washington D.C. area. The transit system continues this with continued development like the recent opening of the system's newest station, [Potomac Yard](https://www.wmata.com/about/news/Potomac-Yard-Opening-Date.cfm), earlier in May ("Metro"). The urban fabric connected by this rail system has developed in tandem through efforts like the 2010 Capital Bikeshare program (Nasri). The general value of such Transit-Oriented Development (TOD) is explored using four indicators to compare attributes within census tracts containing TOD and those not between the years 2009 and 2017. Exploration of the indicators suggests that transit has grown in value across these years with the price of rent and resident population in regions within one half-mile of a Metro station growing in proportion. It is likely TOD has contributed to the trend.
+
+# Introduction
+  Washington, D.C.'s transit system can be regarded as one of the most successful in the United States. For instance an effectiveness study focusing on the area from 2007 to 2008 indicates TOD area residents reduced their Vehicle Miles Traveled (VMT) by 38% (Nasri). While policies supporting TOD through transit connectivity or other means have continued to arrive in DC, is it important to ask whether the Transit-Oriented Development is supported by the residents of the city as well.  
+
+  Alongside the hypothesis that rise in rent follows a resident population's increased value of TOD, I expect that the number of commute riders should increase as well. While distance from transit may not factor into distance from work for all, it is also expected that more people will shorten their trip time for the main daily commute as well. This is explored through the following indicators:
+  
+*  the percentage of residents that use public transportation for their work commute (transit commuters)
+
+* the portion of transit commuters with trips shorter than 30 minutes
+
+* the portion of transit commuters with trips an hour or longer
+
+Additionally the impact of rising rent in primarily TOD areas is examined through visualizing...
+
+* the percentage of household's income used for rent
+  
+  In this brief, **TOD areas** refer to land within a half mile radius of a Metro station and **TOD tracts** refers to those tracts who are within half a mile from stations as well. These terms are interchangeable given used analysis methods.
+
+```{r ACS09-17-20, results = 'hide',warning=FALSE,message=FALSE}
+tracts2009 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        # new ones begin here
+                        "B05012_003E", # ForeignBorn - Jamie
+                        "B25002_003E", # Vacant Household Count
+                        "B25002_001E", # Total Household Count
+                        "B25064_001E", # median gross rent in dollars
+                        "B25071_001E", # median gross rent percent of HHs
+                        
+                        "C08134_001", # means of transport to work by travel time - Total
+
+                        "C08134_031", # means of PUBLIC transport to work by travel time - Total
+                        # in five minute increments (through 032 from 0 to 10 minutes)
+                        "C08134_032", 
+                        "C08134_033",
+                        "C08134_034",
+                        "C08134_035",
+                        "C08134_036", # up to 29 minutes
+                        "C08134_037", # begin 30+ travel time (5 here)
+                        "C08134_038", # 10 minute range
+                        "C08134_039", # 15 minute range
+                        "C08134_040" # an hour+ travel time
+                        ), 
+          year=2009, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         MedGrossRent = B25064_001E,
+         RentPortionOfInc = B25071_001E,
+         WorkTransTotal = C08134_001E,
+         TotalTransitCommuters = C08134_031E,
+         PubTrans_HourUp = C08134_040E
+         ) %>%
+  dplyr::select(-NAME) %>%
+  mutate(pctWhites = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsizes = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         PubTrans_LT30 = C08134_032E+C08134_033E+C08134_034E+C08134_035E+C08134_036E,
+         PubTrans_30To59 = C08134_037E+C08134_038E+C08134_039E,
+         pctTransitCommuter = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal*100,0),
+         pctPubTrans_LT30 = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters*100,0),
+         pctPubTrans_30To59 = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters*100,0),
+         pctPubTrans_HourUp = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters*100,0),
+         year = "2009") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
+
+
+tracts2017 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        # new ones begin here
+                        "B05012_003E", # ForeignBorn - Jamie
+                        "B25002_003E", # Vacant Household Count
+                        "B25002_001E", # Total Household Count
+                        "B25064_001E", # median gross rent in dollars
+                        "B25071_001E", # median gross rent percent of HHs
+                        # means of transport to work totals (non-Pub)
+                        "B08134_001", 
+                        
+                        "B08134_061", # means of PUBLIC transport to work by travel time - Total
+                        # in five minute increments (through 002 from 0 to 10 minutes)
+                        "B08134_062", 
+                        "B08134_063",
+                        "B08134_064",
+                        "B08134_065",
+                        "B08134_066", # up to 29 minutes
+                        "B08134_067", # begin 30+ travel time
+                        "B08134_068",
+                        "B08134_069",
+                        "B08134_070" # an hour+ travel time
+                        ), 
+          year=2017, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         MedGrossRent = B25064_001E,
+         RentPortionOfInc = B25071_001E,
+         WorkTransTotal = B08134_001E,
+         TotalTransitCommuters = B08134_061E,
+         PubTrans_HourUp = B08134_070E
+         ) %>%
+  dplyr::select(-NAME) %>%
+  mutate(pctWhites = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsizes = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         PubTrans_LT30 = B08134_062E+B08134_063E+B08134_064E+B08134_065E+B08134_066E,
+         PubTrans_30To59 = B08134_067E+B08134_068E+B08134_069E,
+         pctTransitCommuter = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal*100,0),
+         pctPubTrans_LT30 = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters*100,0),
+         pctPubTrans_30To59 = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters*100,0),
+         pctPubTrans_HourUp = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters*100,0),
+         year = "2017") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
+
+
+tracts2020 <- 
+  get_acs(geography = "tract", 
+          variables = c("B25026_001E",
+                        "B02001_002E",
+                        "B19013_001E",
+                        "B25058_001E",
+                        "B06012_002E",
+                        # new ones begin here
+                        "B05012_003E", # ForeignBorn - Jamie
+                        "B25002_003E", # Vacant Household Count
+                        "B25002_001E", # Total Household Count
+                        "B25064_001E", # median gross rent in dollars
+                        "B25071_001E", # median gross rent percent of HHs
+                        # means of transport to work totals (non-Pub)
+                        "B08134_001", 
+                        
+                        "B08134_061", # means of PUBLIC transport to work by travel time - Total
+                        # in five minute increments (through 002 from 0 to 10 minutes)
+                        "B08134_062", 
+                        "B08134_063",
+                        "B08134_064",
+                        "B08134_065",
+                        "B08134_066", # up to 29 minutes
+                        "B08134_067", # begin 30+ travel time
+                        "B08134_068",
+                        "B08134_069",
+                        "B08134_070" # an hour+ travel time
+                        ), 
+          year=2020, state="DC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('ESRI:102685') %>%
+  rename(TotalPop = B25026_001E,
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E,
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E,
+         ForeignBorn = B05012_003E, #new ones begin here
+         TotalHHs = B25002_001E,
+         VacantHHs = B25002_003E,
+         MedGrossRent = B25064_001E,
+         RentPortionOfInc = B25071_001E,
+         WorkTransTotal = B08134_001E,
+         TotalTransitCommuters = B08134_061E,
+         PubTrans_HourUp = B08134_070E
+         ) %>%
+  dplyr::select(-NAME) %>%
+  mutate(pctWhites = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         pctForeignBorn = ifelse(TotalPop > 0, ForeignBorn / TotalPop, 0),
+         pctVacant = ifelse(TotalHHs > 0, VacantHHs / TotalHHs, 0),
+         avgHHsizes = ifelse(TotalHHs > 0, TotalPop / TotalHHs, 0),
+         PubTrans_LT30 = B08134_062E+B08134_063E+B08134_064E+B08134_065E+B08134_066E,
+         PubTrans_30To59 = B08134_067E+B08134_068E+B08134_069E,
+         pctTransitCommuter = ifelse(WorkTransTotal!=0,TotalTransitCommuters/WorkTransTotal*100,0),
+         pctPubTrans_LT30 = ifelse(TotalTransitCommuters!=0,PubTrans_LT30/TotalTransitCommuters*100,0),
+         pctPubTrans_30To59 = ifelse(TotalTransitCommuters!=0,PubTrans_30To59/TotalTransitCommuters*100,0),
+         pctPubTrans_HourUp = ifelse(TotalTransitCommuters!=0,PubTrans_HourUp/TotalTransitCommuters*100,0),
+         year = "2020") %>%
+  dplyr::select(-Whites, -TotalPoverty, -VacantHHs,-(ends_with("E")),-(ends_with("M")))
+
+# combine dfs and add inflaction column
+allTracts<- rbind(tracts2009,tracts2017,tracts2020)%>%
+  ## filter year you don't want if three is too many
+  filter(year!="2020") %>%
+  mutate(MedRent.inf = ifelse(year=="2009",MedRent*1.43,ifelse(year=="2017",MedRent*1.25,ifelse(year=="2020",MedRent*1.19,MedRent))))
+```
+
+```{r pull_metro_data, results='hide'}
+metroStops <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/52/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, LINE) %>%
+  st_transform(st_crs(allTracts)) #change st_transform if needed
+
+metroStops$linecount <- sapply(strsplit(metroStops$LINE, ", "), function(x) length(x))
+
+metroLines <- st_read("https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Rail_Bus_WebMercator/MapServer/106/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    dplyr::select(NAME, GIS_ID) %>%
+  st_transform(st_crs(allTracts))
+```
+
+```{r view_metro_data,warning=FALSE,include=FALSE,include=FALSE}
+ggplot() +
+  geom_sf(data=allTracts,fill = "#75AEFB", color = "#343434")+ # skyblue = "#87CEEB"
+  geom_sf(data=metroStops, 
+          show.legend = "point", linewidth=2,
+          color = "black")+ # str_split(LINE,",",simplify=T)[1]) maybe (too many legend entries)
+  geom_sf(data=metroLines, 
+          aes(colour=NAME))+
+  geom_line(linewidth=10)+ #JS - I don't think this size adjustment is working
+  scale_colour_manual(values=stops_palette)+
+  labs(color="DC Metro Lines")+
+  mapTheme()
+```
+
+```{r metro_buffer,warning=FALSE,message=FALSE,results='hide'}
+metroBuffers <- 
+  rbind(
+    st_buffer(metroStops, 2640) %>% # half-mile
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(metroStops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+buffer <- filter(metroBuffers, Legend=="Unioned Buffer")
+
+# view buffer with points
+# ggplot() +
+#   geom_sf(data=metroBuffers) +
+#   geom_sf(data=metroStops, show.legend = "point") +
+#   facet_wrap(~Legend) + 
+#   mapTheme()
+```
+
+```{r select_by_centroids_and_summarize,warning=FALSE,message=FALSE}
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(TransitCommutersQ5 = quantile(pctTransitCommuter,c(0.2,0.4,0.6,0.8,1.0))[q5(pctTransitCommuter)]*100,
+         Short_Q5 = quantile(pctPubTrans_LT30,c(0.2,0.4,0.6,0.8,1.0))[q5(pctPubTrans_LT30)]*100,
+         HrMore_Q5 = quantile(pctPubTrans_HourUp,c(0.2,0.4,0.6,0.8,1.0))[q5(pctPubTrans_HourUp)]*100,
+         RentPortionQ5 = quantile(RentPortionOfInc,c(0.2,0.4,0.6,0.8,1.0),na.rm=T)[q5(RentPortionOfInc)],
+         fill = ifelse(TOD=="TOD","#A4D579","#75AEFB")) 
+
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(Rent = mean(MedRent.inf, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              Percent_PublicTransit = mean(pctTransitCommuter, na.rm = T), 
+              Percent_ShortCommute = mean(pctPubTrans_LT30, na.rm = T),
+              Percent_LongCommute = mean(pctPubTrans_HourUp, na.rm = T),
+              RentPortionOfInc = mean(RentPortionOfInc, na.rm = T))
+
+```
+
+# Indicator Variable Visualizations (TOD & Non-TOD)
+```{r visualization1,warning = FALSE,message=FALSE}
+
+# for transit commuter percentages
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "black", aes(fill = q5(pctTransitCommuter)),alpha=0.7)+
+  geom_sf(data=buffer,fill="transparent",color="#43a2ca",linewidth=0.8) + # crystal green #A4D579; black used for color before: #343434
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group, "pctTransitCommuter"),
+                    name = "% of Respondents\n(Quintile Breaks)")+
+  labs(title = "% of People Using Transit for Work Commute", subtitle = "Philadelphia; 2009 & 2017") +
+  facet_wrap(~year)+
+  mapTheme()+
+  theme(plot.title = element_text(size=22))
+
+```
+
+The percentage of people using transit for their work commute has many tracts that remain high in ridership across 2009 and 2017, though TOD areas in the center of the city see some dispersion with previously high areas above 40% dropping down one quintile and the surrounding tracts rising a quintile. A general decrease can be observed in the south part of the city for non-TOD. Connectivity policies and programs may have encouraged the slight dispersion of ridership over time.
+
+```{r visualization2,warning = FALSE,message=FALSE}
+# for low travel times
+ggplot() +
+  geom_sf(data=allTracts.group, color = "black", aes(fill = q5(pctPubTrans_LT30)),alpha=0.7)+
+  geom_sf(data=buffer,fill="transparent",color="#43a2ca",linewidth=0.8) + # crystal green #A4D579; black used for color before: #343434
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,"pctPubTrans_LT30"),
+                    name = "% of <30 Minute Transit Users\n(Quintile Breaks)")+
+  labs(title = "Public Transit Users for Work Commute\n- < 30 Minute Trip", subtitle = "Philadelphia; 2009 & 2017") +
+  facet_wrap(~year)+
+  mapTheme()+
+  theme(plot.title = element_text(size=22))
+```
+The greatest percentages of riders with commutes shorter than 30 minutes can be found within TOD areas, especially within the center of DC. This remains constant between 2009 and 2017 when viewed in this map.
+
+
+```{r visualization3,warning = FALSE,message=FALSE}
+# for high travel times
+ggplot() +
+  geom_sf(data=allTracts.group, color = "black", aes(fill = q5(pctPubTrans_HourUp)),alpha=0.7)+
+  geom_sf(data=buffer,fill="transparent",color="#43a2ca",linewidth=0.8) +
+    scale_fill_manual(values = palette5,
+                    labels = qBr(allTracts.group,"pctPubTrans_HourUp"),
+                    name = "% of 60+ Minute Transit Users\n(Quintile Breaks)")+
+  labs(title = "Public Transit Users for Work Commute\n- Hour Or Longer Trip", subtitle = "Philadelphia; 2009 & 2017") +
+  facet_wrap(~year)+
+  mapTheme()+
+  theme(plot.title = element_text(size=22))
+```
+
+Those with commutes longer than one hour can mainly be found in southern and eastern DC. The increase in hour-long commuters shown between 2009 and 2017 extends to tracts in the north of the city. This suggests that more incoming DC residents, while not mainly living in TOD areas, may use transit to also commute out into states like Virginia or Maryland.
+
+```{r visualization4,warning = FALSE,message=FALSE}
+# for portion of income used for rent
+
+ggplot() +
+  geom_sf(data=allTracts.group, color = "black", aes(fill = q5(RentPortionOfInc)),alpha=0.7)+
+  geom_sf(data=buffer,fill="transparent",color="#43a2ca",linewidth=0.8) +
+    scale_fill_manual(values = palette5,
+                    name = "Percentage\n(Quintile Breaks)",
+                    labels = qBr(allTracts.group,"RentPortionOfInc"))+
+  labs(title = "Rent's Portion of Household Income", subtitle = "Philadelphia; 2009 & 2017") +
+  facet_wrap(~year)+
+  mapTheme()+
+  theme(plot.title = element_text(size=22))
+
+# Total Pop, nice quick view
+# ggplot() +
+#   geom_sf(data=allTracts.group, color = "black", aes(fill = q5(TotalPop)),alpha=0.7)+
+#   geom_sf(data=buffer,fill="transparent",color="#43a2ca",linewidth=0.8) +
+#     scale_fill_manual(values = palette5,
+#                     name = "Count\n(Quintile Breaks)",
+#                     labels = qBr(allTracts.group,"TotalPop"))+
+#   labs(title = "Total Population", subtitle = "Philadelphia; 2009 & 2017") +
+#   facet_wrap(~year)+
+#   mapTheme()+
+#   theme(plot.title = element_text(size=22))
+
+```
+The price of rent's portion of household income also appears to be highest along the outside edges of the city with the highest amounts in non-TOD areas. A few tracts increase in the rent's portion from 2009 to 2017 while TOD areas appear to lessen aside from the two southmost stations of the city.
+
+### Bar Charts of Indicator Change Over Years or Area
+
+```{r barPlots,warning = FALSE,message=FALSE}
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+    group_by(year, TOD) %>%
+    summarize(Rent = mean(MedRent.inf, na.rm = T),
+              Population = mean(TotalPop, na.rm = T),
+              Percent_Public_Transit = mean(pctTransitCommuter, na.rm = T),
+              Low_Travel_Time = mean(pctPubTrans_LT30, na.rm = T),
+              High_Travel_Time = mean(pctPubTrans_HourUp, na.rm = T),
+              Rent_Portion_Income = mean(RentPortionOfInc,na.rm=T))
+
+# bar plots
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD,-Rent,-Population) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Variable, scales = "free",nrow=3) +
+  scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+  labs(title = "Indicator differences across time and space",x="Year") +
+  plotTheme() + theme(legend.position="right")
+```
+These bar plots show comparisons of indicator variables between the TOD and non-TOD census tracts at a glance. We can draw a general conclusion that those living in non-TOD tracts have more portions of transit users with hour-long commutes while TOD tracts riders have fewer that 30 minute commutes. We can also observe that the percentages of public transit commuters and of rent as a portion of household income remain relatively constant across the years despite growing populations and rent prices on the whole. The public transit commuter percentage suggests that incoming residents quickly acclimate to the local transit system and do not choose to disregard it with some potential to increase ridership. The rent as a portion of income plot displays a slightly decreased outtaking of income which can suggest an increase in the income of new residents when paired with DC's rising population .
+
+### Table of Indicator Change Over Years or Area
+```{r tables,message=FALSE,warning=FALSE}
+
+allTracts.Summary %>%
+  select(-Rent,-Population) %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value)%>%
+  kable(caption="Changes in Indicators of Desire for TOD in DC - 2009 & 2017") %>%
+  kable_styling(bootstrap_options = c("striped","hover")) %>%
+  kable_classic_2(full_width = F, html_font = "Constantia")
+```
+This table shows a numerical comparison between the years and spatial areas of TOD and non-TOD. The portion of household income made up by rent consistently remains around 31% for non-TOD areas and 29% for TOD areas. The portion of income data suggests that the rising rent price for those in either type of area is not an increasing issue across the census tracts. There is a potential explanation that many of the new incoming residents, especially for TOD areas, are more wealthy than earlier ones and thereby lowering rent's average portion of income for TOD tracts.
+
+In regards to transportation, the percentage of people using any public transit to commute in tracts further than one half-mile from a station  decline between the years while it increases in TOD areas. The percent remains above an estimated third of the population regardless, but TOD areas see 40% of workers using transit to commute. The percentage who need to travel an hour or more stays low in comparison to high percentages of riders with quick trips lower than 30 minutes in TOD tracts. For those in non-TOD areas, both categories of transit riders remain around 20%. It is possible that transit might be a tool to connect commuters to the more than simply work. Higher residential populations northwest of the National Mall paired with many stations in said area with easy access to downtown or potential work areas might explain the roughly 60% of commuters using public transportation with commutes between 30 and 60 minutes.
+
+### Graduated Symbol Maps - Population and Median Contract Rent
+
+```{r regenerate_stopbuffer,warning = FALSE,message=FALSE}
+
+selection1 <- 
+  allTracts[buffer,] %>%
+  dplyr::select(TotalPop,MedRent.inf,year) %>%
+  mutate(Selection_Type = "Spatial Selection")
+
+stopBuffer <- st_buffer(metroStops, 2640)
+stopBuffer$ID <- seq_along(stopBuffer$geometry)
+
+TOD_tracts <- selection1 %>% 
+  st_intersection(stopBuffer, selection1)
+
+pop_rent2009 <- TOD_tracts %>%
+  st_drop_geometry() %>%
+  group_by(ID,year) %>%
+  summarize(x = mean(MedRent.inf), y = sum(TotalPop),removed_x=!complete.cases(mean(MedRent.inf)))
+
+symbol_pos <- stopBuffer %>%
+  dplyr::select(ID) %>%
+  st_centroid()
+
+
+```
+
+```{r grad_symbol_map,warning = FALSE,message=FALSE}
+# Bubble choropleth map
+# Graduated Symbol Map
+labels_y <- symbol_pos %>%
+  left_join(pop_rent2009,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(y)) 
+
+min <- min(labels_y$x,na.rm=TRUE)
+med <- median(labels_y$x,na.rm=TRUE)
+q1 <- summary(labels_y$x)[2]
+
+# for population
+ggplot() +
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = y),
+          fill = alpha("blue", 0.7),
+          col = "gray30") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Population near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+
+labels_y <- symbol_pos %>%
+  left_join(pop_rent2009,
+            by = c("ID" = "ID")) %>%
+  arrange(desc(x))
+
+# for rent (per month)
+ggplot() +
+  geom_sf(data = allTracts.group,
+          fill = "gray95",
+          color = "gray") +
+  geom_sf(data = labels_y,
+          pch = 21,
+          aes(size = ifelse(removed_x,NA,x)),
+          # aes_string(ifelse(removed_x,"Undefined Stop",x)),
+          fill = alpha("red", 0.7),
+          col = "gray30") +
+  ## if you want NA points shown for spatial awareness
+  # geom_sf(data = labels_y,
+  #         pch = 21,
+  #         aes(size = ifelse(!removed_x,NA,q1)),
+  #         fill = alpha("gray72", 0.7),
+  #         col = "gray30") +
+  scale_size(
+    range = c(.5, 6),
+    guide = guide_legend(
+      direction = "horizontal",
+      nrow = 1,
+      label.position = "bottom")) +
+  guides(fill = guide_legend(title = "")) +
+  labs(title = "Means of median rents near DC Metro stations",
+       sub = "Based on 1/2 mile buffers",
+       size = "") +
+  theme_void() +
+  facet_wrap(~year) +
+  theme(legend.position = "bottom")
+```
+The population maps show that the general rank of population concentrations remained across the different years with the highest populated areas near central DC surrounding the White House and National Mall. While the rank between areas remained constant, the number in each area appears to have grown across the snapshots which agrees with the noted increase of about 500 people in both TOD and non-TOD areas.
+
+Although some areas near stops had missing data for median rent values, the same trend also occurs showing a constant increase in rent. Using inflation adjusted values the increase in rent price remains.
+
+### Rental Prices At Distances from Transit
+
+Considering the prices of rent at distances close to and far from transit, the following line chart displays the impact of proximity to transit across the years.
+```{r mrb_test,warning = FALSE,message=FALSE}
+DCmetro_MRB <- multipleRingBuffer(st_union(metroStops),
+                                maxDistance = 2640*5, # half=mile buffers
+                                interval =  2640)
+```
+
+```{r visualize_mrb_test,warning = FALSE,message=FALSE,include=FALSE}
+ggplot() +
+    geom_sf(data=DCmetro_MRB) +
+    geom_sf(data=metroStops, size=1) +
+    geom_sf(data=st_union(allTracts), fill=NA, size=1.2) +
+    labs(title="Half mile buffers") +
+    mapTheme()
+```
+
+```{r mrb_line_chart,warning = FALSE,message=FALSE}
+# adding allTracts.rings
+allTracts.rings <- 
+  allTracts %>% 
+  select(GEOID, year) %>% 
+  st_centroid() %>% 
+  st_join(DCmetro_MRB, join = st_intersects) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent.inf, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+allTracts.rings.summary <- st_drop_geometry(allTracts.rings) %>%
+    group_by(distance, year) %>%
+    summarize(Mean_Rent = mean(MedRent.inf, na.rm=T))
+
+ggplot(allTracts.rings.summary,
+       aes(distance, Mean_Rent, colour=year)) +
+      geom_point(size=3) + 
+  geom_line(size=2)+
+  labs(x="Distance from a Metro Station (miles)",y="Mean Rental Price ($)",year="Year",title = "Average Rent Prices by Distance from DC Metro",subtitle="Comparing 2009 & 2017")
+```
+
+Fitting with our other data observations, this line chart shows a general increase of rent in 2017. However, it also depicts a trend towards higher rent prices directly near transit or in the first half-mile followed by a lower prices up to 1.5 miles from transit and finally the highest prices being for property located 2 miles from any Metro stop or further. This is present across both years, though 2017 has an amplified increase in rent prices the first half mile from transit compared to miles 1 to 1.5. The establishment and familiarity of  transit-oriented development like the Capital Bikeshare being around for 7 years by this time could have encouraged other business and destinations to the TOD area raising that price much closer to the rent for property 2 miles away from transit in 2017.
+
+# Conclusion
+With the D.C. area's Transit-Oriented Development efforts over the 2010s, we can observe an increase in residents using the system in conjunction with the steady rise in population and rent price of areas located near transit access points. The observed changes are relatively higher in these TOD areas, but proportions like the rent's percent of household income suggest newer residents in such areas are more wealthy than before. This slight change in constituency speaks to the value of transit and related TOD in attracting residents but should also be considered for future policies concerned with equity or transportation access for the wider D.C. area.
+
+## References
+
+"Metro and City of Alexandria announce Potomac Yard Station opening data". _Washington Metropolitan Area Transit Authority_, 19 Apr 2023, https://www.wmata.com/about/news/Potomac-Yard-Opening-Date.cfm, Accessed 20 Sep 2023.
+
+Nasri, Arefeh and Lei Zhang. "The analysis of transit-oriented development (TOD) in Washington, D.C. and Baltimore metropolitan areas."
+_Transport Policy_, vol. 32, 2014, pp. 172-179,
+https://doi.org/10.1016/j.tranpol.2013.12.009, Accessed 20 Sep 2023.
